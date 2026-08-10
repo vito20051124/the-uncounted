@@ -14,8 +14,9 @@
     "validate": "node scripts/validate-data.mjs",
     "smoke": "node scripts/smoke.ts",
     "pareto": "node scripts/pareto-check.ts",
-    "check": "node scripts/validate-data.mjs && tsc --noEmit && node scripts/pareto-check.ts && node scripts/smoke.ts && node scripts/balance.ts 200",
-    "balance": "node scripts/balance.ts 300"
+    "check": "node scripts/validate-data.mjs && tsc --noEmit && node scripts/pareto-check.ts && node scripts/smoke.ts && node scripts/save-test.ts && node scripts/balance.ts 200",
+    "balance": "node scripts/balance.ts 300",
+    "save-test": "node scripts/save-test.ts"
   },
   "dependencies": {
     "preact": "^10.24.3"

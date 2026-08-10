@@ -22,6 +22,10 @@ import {
   reduce, type Action,
 } from '../engine/reduce.ts'
 import { MapView } from './MapView.tsx'
+import {
+  AUTO_SLOT, STORAGE_OK, autosave, describeSlot, erase,
+  listSlots, read, slotLabel, write, type SlotId,
+} from './storage.ts'
 
 import npcsJson from '../../data/npcs.json'
 import nodesJson from '../../data/nodes.json'
@@ -89,6 +93,10 @@ export function App() {
    *   現在先停在一幀讓玩家讀完，再進 Summary。
    */
   const [dying, setDying] = useState(false)
+  /** 存檔類的短訊。刻意與敘事 log 分離——它不是故事的一部分。 */
+  const [notice, setNotice] = useState<string | null>(null)
+  const [slots, setSlots] = useState(() => (STORAGE_OK ? listSlots() : []))
+  const refreshSlots = () => setSlots(listSlots())
 
   const ctx = useMemo(() => ctxOf(s, IDX), [s])
   const here = IDX.node.get(s.at)!
@@ -97,6 +105,17 @@ export function App() {
 
   function apply(a: Action) {
     const r = reduce(s, a, IDX)
+    // ★ 跨日就自動存檔。天亮是這個遊戲天然的存檔點——
+    //   而 storage.autosave 內建「死了不存」，否則唯一的自動檔會停在死掉那一刻，
+    //   「可回檔」就成了空話（見 storage.ts 檔頭）。
+    if (r.s.clock.day !== s.clock.day) {
+      if (autosave(r.s, IDX)) {
+        setNotice('已自動存檔（第 ' + r.s.clock.day + ' 日天亮）')
+        // ★ 寫完要重算槽位列表，否則設置頁會把剛寫進去的自動檔顯示成「（空）」，
+        //   而玩家會以為存檔沒成功——然後覆蓋掉它。（瀏覽器實測抓到）
+        refreshSlots()
+      }
+    }
     setS(r.s)
     setLog(r.log)
     setTravelTo(null)
@@ -108,6 +127,35 @@ export function App() {
       const drawn = drawEvent(r.s, IDX, ctxOf(r.s, IDX))
       setEvId(drawn ? drawn.id : null)
     }
+  }
+
+  function doSave(slot: SlotId) {
+    const r = write(slot, s, IDX)
+    setNotice(r.ok ? slotLabel(slot) + '：已存檔' : '存檔失敗：' + r.error)
+    refreshSlots()
+  }
+
+  function doLoad(slot: SlotId) {
+    const r = read(slot, IDX)
+    if (!r) { setNotice(slotLabel(slot) + ' 是空的'); return }
+    if (!r.ok) {
+      // ★ 大聲失敗。壞檔絕不默默補成「看起來能玩」——見 save.ts validate 的註解。
+      setNotice('讀取失敗：' + r.error + (r.detail.length ? '\n· ' + r.detail.join('\n· ') : ''))
+      return
+    }
+    setS(r.state)
+    setLog(['（讀取了' + slotLabel(slot) + '。）'])
+    setDying(false)
+    setEvId(null)
+    setTravelTo(null)
+    setPhase('play')
+    setNotice(r.migratedFrom !== null ? '已載入，並自動升級了存檔格式（v' + r.migratedFrom + ' → v2）' : '已載入')
+  }
+
+  function doErase(slot: SlotId) {
+    erase(slot)
+    refreshSlots()
+    setNotice(slotLabel(slot) + '：已刪除')
   }
 
   // ── 開場 ──
@@ -123,6 +171,19 @@ export function App() {
               introStep < INTRO.length - 1 ? setIntroStep(introStep + 1) : setPhase('pick')}>
               {introStep < INTRO.length - 1 ? '……' : '睜開眼睛'}
             </button>
+            {/* ★ 有存檔就在開場提供入口。不要求玩家先開新局才能讀舊局。 */}
+            {introStep === 0 && slots.some((x) => x.summary && !x.summary.dead) && (
+              <div style="margin-top:14px">
+                <div class="sec-label">或者繼續上一局</div>
+                {slots.filter((x) => x.summary && !x.summary.dead).map((x) => (
+                  <button class="choice" style="width:100%;margin-top:6px" onClick={() => doLoad(x.slot)}>
+                    {slotLabel(x.slot)}
+                    <span class="choice-meta">{describeSlot(x, IDX)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {notice && <div class="notice" style="margin-top:12px">{notice}</div>}
           </div>
         </div>
       </div>
@@ -164,7 +225,7 @@ export function App() {
     )
   }
 
-  if (phase === 'end') return <Summary s={s} />
+  if (phase === 'end') return <Summary s={s} onLoad={doLoad} slotList={slots} />
 
   // ★ 死亡那一幀。支柱三禁止「無預警致命」——致死那一夜的敘述必須被讀到，
   //   而不是直接跳到回溯畫面。舊版就是直接跳。
@@ -742,6 +803,34 @@ export function App() {
 
           {tab === 'set' && (
             <>
+              <div class="zone-head" style="padding:0;border:none;margin-bottom:6px">存檔</div>
+              {!STORAGE_OK && (
+                <div class="notice">這個瀏覽器不允許存檔（localStorage 被停用，或在無痕模式）。</div>
+              )}
+              {STORAGE_OK && slots.map((x) => (
+                <div class="slot">
+                  <div class="slot-head">
+                    <span>{slotLabel(x.slot)}</span>
+                    {x.broken && <span class="no">壞檔</span>}
+                  </div>
+                  <div class="slot-body">{describeSlot(x, IDX)}</div>
+                  <div class="slot-acts">
+                    {x.slot !== AUTO_SLOT && (
+                      <button class="inv-act" onClick={() => doSave(x.slot)}>
+                        {x.summary ? '覆蓋' : '存檔'}
+                      </button>
+                    )}
+                    <button class="inv-act" disabled={!x.summary && !x.broken} onClick={() => doLoad(x.slot)}>讀取</button>
+                    <button class="inv-act" disabled={!x.summary && !x.broken} onClick={() => doErase(x.slot)}>刪除</button>
+                  </div>
+                </div>
+              ))}
+              {notice && <div class="notice" style="margin:8px 0">{notice}</div>}
+              <div class="inv-desc" style="margin:10px 0 14px">
+                死亡是永久的——但你可以讀回更早的存檔。自動存檔在每天天亮時寫入，<b>且死了不存</b>，
+                所以它永遠是「還活著的那個早上」。
+              </div>
+
               <div class="detail-row"><span>貨幣</span><span>1 金帝 ＝ 240 銅（非十進）</span></div>
               <div class="detail-row"><span>版本</span><span>P0.5</span></div>
               <div class="detail-row"><span>種子</span><span style="font-size:11px">{s.meta.seed.slice(-8)}</span></div>
@@ -765,7 +854,11 @@ export function App() {
   )
 }
 
-function Summary({ s }: { s: GameState }) {
+function Summary({ s, onLoad, slotList }: {
+  s: GameState
+  onLoad?: (slot: SlotId) => void
+  slotList: ReturnType<typeof listSlots>
+}) {
   const wore = s.flags['wears-local'] === true
   return (
     <div class="center-stage" style="align-items:flex-start">
@@ -830,7 +923,15 @@ function Summary({ s }: { s: GameState }) {
           <li>錢的壓力是太鬆、太緊、還是剛好？</li>
           <li><strong>你會想再玩一次嗎？</strong></li>
         </ol>
-        <button class="choice" style="width:220px" onClick={() => location.reload()}>再玩一次</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="choice" style="width:200px" onClick={() => location.reload()}>從頭再玩一次</button>
+          {onLoad && slotList.filter((x) => x.summary && !x.summary.dead).map((x) => (
+            <button class="choice" style="width:260px" onClick={() => onLoad(x.slot)}>
+              讀取{slotLabel(x.slot)}
+              <span class="choice-meta">{x.summary && `第 ${x.summary.day} 日　${x.summary.at}　${x.summary.copper} 銅`}</span>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   )

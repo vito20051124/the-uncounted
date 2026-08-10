@@ -280,3 +280,14 @@ table.sum td:last-child { text-align: right; font-variant-numeric: tabular-nums;
 /* 需求列底下的一行實算後果。★ 不用方框——左欄的垂直空間是稀缺資源。 */
 .need-why { font-size: 10.5px; color: #93826c; margin-top: 2px; line-height: 1.4; font-variant-numeric: tabular-nums; }
 .need-why .fix { color: #9c8256; }
+
+/* ── 存檔槽 ── */
+.slot { border: 1px solid var(--line); border-radius: 3px; padding: 7px 9px; margin-bottom: 7px; background: #16120e; }
+.slot-head { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--ink-dim); margin-bottom: 3px; }
+.slot-body { font-size: 11.5px; color: #8d8274; line-height: 1.5; white-space: pre-line; font-variant-numeric: tabular-nums; }
+.slot-acts { display: flex; gap: 5px; margin-top: 6px; }
+.slot-acts .inv-act { flex: 1; }
+.notice {
+  background: #14202a; border: 1px solid #2f4152; border-left: 3px solid #5a8ab5;
+  border-radius: 3px; padding: 6px 9px; font-size: 12px; color: #a8c4d8; white-space: pre-line; line-height: 1.55;
+}
