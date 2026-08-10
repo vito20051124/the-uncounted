@@ -70,12 +70,49 @@ const anchor = (re, txt, what) => {
   return m
 }
 
+/**
+ * 從一段 TypeScript 介面／型別的主體裡抓出【頂層】的鍵名。
+ *
+ * ★ 為什麼不能用縮排：舊版要求「行首恰好兩個空白後緊接識別字」，
+ *   而一個【與欄位同行的 JSDoc 註解】會讓那個欄位完全不進 declared
+ *   ——於是 ⑥ 的兩半檢查（零實例／可達性）同時對它失效。
+ *   而同行短註解正是這份 types.ts 已經在用的風格（`elevation: number // 公尺`）。
+ *
+ * ★★ 也不能簡單放寬成 `\s{2,}`：那會抓到嵌套物件型別的內層鍵
+ *   （`needs` 裡的 satiety/hydration…），一改就【誤報】。
+ *   「恰好兩格」實際上是在做頂層過濾，所以正解是明確地數括號深度。
+ */
+function topLevelKeys(body) {
+  const t = stripComments(body)
+  const keys = []
+  let depth = 0
+  let i = 0
+  while (i < t.length) {
+    const c = t[i]
+    if ('{[('.includes(c)) { depth++; i++; continue }
+    if ('}])'.includes(c)) { depth--; i++; continue }
+    if (depth === 0 && (i === 0 || /[\s;,{]/.test(t[i - 1]))) {
+      const m = /^(\w+)\??\s*:/.exec(t.slice(i))
+      if (m) { keys.push(m[1]); i += m[0].length; continue }
+    }
+    i++
+  }
+  return keys
+}
+
 // ① 參照完整性
 for (const e of edges) {
   if (!nodeIds.has(e.a)) E(`edge ${e.id}: 端點 a 不存在 → ${e.a}`)
   if (!nodeIds.has(e.b)) E(`edge ${e.id}: 端點 b 不存在 → ${e.b}`)
   if (!Number.isInteger(e.minutes) || e.minutes <= 0) E(`edge ${e.id}: minutes 必須為正整數`)
   if (e.knowledge !== 'public' && e.knowledge !== 'learned') E(`edge ${e.id}: knowledge 值非法`)
+  // ★ 同一個迴圈裡 knowledge 檢查了、requiresTide 卻零檢查——就是這種不對稱在漏。
+  //   'ebb' 打成 'ebbing' → map.ts 讓那條邊在【兩種潮汐都不通】，
+  //   而玩家會把它讀成正常的潮汐機制而不回報 bug（比崩掉更難發現）。
+  if (e.requiresTide !== undefined && e.requiresTide !== 'rise' && e.requiresTide !== 'ebb')
+    E(`edge ${e.id}: requiresTide 值非法 → ${JSON.stringify(e.requiresTide)}（只能是 'rise' | 'ebb'）`)
+  if (e.climbFactor !== undefined && (typeof e.climbFactor !== 'number' || !(e.climbFactor > 0)))
+    E(`edge ${e.id}: climbFactor 必須是正數 → ${JSON.stringify(e.climbFactor)}`)
 }
 for (const j of jobs) {
   if (!Number.isInteger(j.maxPerDay) || j.maxPerDay < 1) E(`job ${j.id}: maxPerDay 必須是 >=1 的整數（一天只挑一次人；缺這格會讓錄取率被原地重試磨平）`)
@@ -330,41 +367,67 @@ for (const j of jobs) {
    * 不是用來讓檢查閉嘴。
    */
   const UNUSED_OK = {
-    onEdge: '路段上的事件【功能未建】：travel 只逐邊做風險判定（reduce.ts:388），'
-      + '從不帶邊的上下文抽事件，所以 ctxOf 的第三參數沒有呼叫點會填。'
-      + '保留謂詞是因為 03_condition_dsl.md 把它列為 P0 謂詞集，而路段事件排 P2。'
-      + '★ 一旦有內容用它，下面的「結構上可能為真」檢查會擋下來——這正是要的行為。',
-    tideJustTurned: '同上：ctxOf 的第四參數沒有呼叫點會填。'
-      + '原規格要它表達「潮水剛轉」，目前內容改用 tide 表達「現在是漲/退潮」，語意較寬但可用。',
-    rep: '聲望系統【只有讀取端】：cond.ts 讀 s.rep，而全 src 唯一寫入是 reduce.ts 的 rep: {}，'
-      + 'Choice.gain 連 rep 格位都沒有。所以它恆為「拿 0 去比」。'
-      + '未刪除是因為 01_architecture.md 仍把 repEffects 列為工作表欄位——'
-      + '那份文件與實作的落差已登錄，此處只保證它不會被誤用。',
-    onAction: '連型別都沒有，僅存在於設計文件的謂詞清單裡。',
-    givenAway: '「無償把東西給出去的次數」——計數器【有增也有讀】（gain.giveAway 增、'
-      + '局末摘要「把東西給出去 N 次」讀），但作為【條件】目前沒有任何事件或結局用它。'
-      + '保留而不刪的理由：05_main_story.md 把「給出」列為第 3 層（歸屬）的機制，'
-      + '而三條結局刻意都不要求它——因為「給過幾次」不該變成一張門票。'
-      + '★ 這一行是驗證器逼出來的一個【寫下來的決定】，不是讓它閉嘴。',
+    onEdge: {
+      onUse: 'error',
+      why: '路段上的事件【功能未建】：travel 只逐邊做風險判定，從不帶邊的上下文抽事件，'
+        + '所以沒有任何 ctxOf 呼叫點會填 onEdge。保留謂詞是因為 03_condition_dsl.md 把它列為'
+        + ' P0 謂詞集，而路段事件排 P2。',
+    },
+    tideJustTurned: {
+      onUse: 'error',
+      why: '同上：沒有任何 ctxOf 呼叫點會填 tideJustTurned。原規格要它表達「潮水剛轉」，'
+        + '目前內容改用 tide 表達「現在是漲/退潮」，語意較寬但可用。',
+    },
+    rep: {
+      onUse: 'error',
+      why: '聲望系統【只有讀取端】：cond.ts 讀 s.rep，而全 src 唯一寫入是 initialState 的 rep: {}，'
+        + 'Choice.gain 連 rep 格位都沒有。所以任何 rep 條件恆為「拿 0 去比」＝恆假。'
+        + '（另外 FactionId 是 string 且 data/ 沒有 faction 註冊表，所以連 id 拼錯都沒有人查——'
+        + '日後接上聲望系統時要一併建 data/factions.json 並在 walkCond 補存在性檢查。）',
+    },
+    onAction: { onUse: 'error', why: '連型別都沒有，僅存在於設計文件的謂詞清單裡。' },
+    givenAway: {
+      onUse: 'ok',
+      why: '「無償把東西給出去的次數」——計數器【有增也有讀】（gain.giveAway 增、'
+        + '局末摘要「把東西給出去 N 次」讀），只是作為【條件】還沒有任何事件或結局用它。'
+        + '三條結局刻意都不要求它——「給過幾次」不該變成一張門票。'
+        + '★ 這一行是驗證器逼出來的一個【寫下來的決定】，不是讓它閉嘴。',
+    },
   }
 
   // 每個謂詞讀哪個【選用的】Ctx 欄位（決定它是否結構上可能為真）
-  const CTX_DEP = { onEdge: 'onEdge', tideJustTurned: 'tideJustTurned' }
-  const ctxArity = (() => {
-    const calls = [...engineAndCallers().matchAll(/ctxOf\(([^)]*)\)/g)]
-      .map((m) => m[1])
-      .filter((argsText) => !/:\s*(GameState|Index)/.test(argsText)) // 排除函式宣告自身
-    let max = 0
-    for (const argsText of calls) {
-      let depth = 0, n = argsText.trim() ? 1 : 0
-      for (const c of argsText) {
-        if ('([{'.includes(c)) depth++
-        else if (')]}'.includes(c)) depth--
-        else if (c === ',' && depth === 0) n++
-      }
-      if (n > max) max = n
+  /**
+   * ★★ Ctx 的【選用】欄位由型別自己列舉，不再維護一張硬寫的對照表。
+   *   舊版的 `CTX_DEP = { onEdge: ..., tideJustTurned: ... }` 硬寫兩筆，
+   *   於是新增第三個選用 Ctx 欄位時查不到它 → dep=undefined → 自動判定為可達。
+   */
+  const ctxSrc = srcOf('src/engine/cond.ts')
+  const ctxBlock = anchor(/export interface Ctx\s*\{([\s\S]*?)\n\}/, ctxSrc, '在 cond.ts 找不到 export interface Ctx')
+  const ctxOptional = new Set(
+    ctxBlock
+      ? topLevelKeys(ctxBlock[1]).filter((k) => new RegExp(`\\b${k}\\?\\s*:`).test(stripComments(ctxBlock[1])))
+      : [],
+  )
+
+  /**
+   * 哪些【選用的 Ctx 欄位】真的有人填。
+   *
+   * ★ 改成掃「ctxOf 的實參物件裡出現的鍵名」而不是數參數個數。
+   *   ctxOf 的簽章已改為具名物件（見 reduce.ts 該函式的註解），所以這裡問的是
+   *   「有沒有一處寫了 `onEdge:`」——鍵名就是欄位名。
+   *   對型別包裝免疫（實參是值不是型別）、新增欄位自動生效。
+   *
+   * ★ 只掃 src/：測試腳本把 onEdge 傳進去，不會讓玩家在遊戲裡碰得到它。
+   *   且已剝註解——⑥ 曾經把自己的說明註解算成一個呼叫點。
+   */
+  const ctxFilled = (() => {
+    const filled = new Set()
+    for (const m of engineAndCallers().matchAll(/ctxOf\(([\s\S]{0,240}?)\)/g)) {
+      const args = m[1]
+      if (/:\s*(GameState|Index)/.test(args)) continue // 函式宣告自身
+      for (const k of ctxOptional) if (new RegExp(`\\b${k}\\s*:`).test(args)) filled.add(k)
     }
-    return max
+    return filled
   })()
   /**
    * ★★ 只掃 src/，而且【先剝掉註解】。兩者都是被自己咬過之後才寫對的。
@@ -415,17 +478,18 @@ for (const j of jobs) {
   for (const e of endings) walkKeys(e.requires)
 
   if (condBlock) {
-    const declared = [...condBlock[1].matchAll(/^\s{2}(\w+)\??:/gm)].map((m) => m[1])
-      .filter((k) => !STRUCTURAL.has(k))
+    // ★ 用括號深度掃頂層鍵，不用縮排（見 topLevelKeys 的註解：同行 JSDoc 會讓謂詞隱形）
+    const declared = topLevelKeys(condBlock[1]).filter((k) => !STRUCTURAL.has(k))
 
     for (const k of declared) {
       const n = used.get(k) ?? 0
-      const dep = CTX_DEP[k]
-      const reachable = dep ? ctxArity >= (dep === 'onEdge' ? 3 : 4) : true
+      // 這個謂詞讀哪個選用的 Ctx 欄位？（同名即依賴——onEdge 讀 ctx.onEdge）
+      const dep = ctxOptional.has(k) ? k : null
+      const reachable = dep ? ctxFilled.has(dep) : true
 
       if (n > 0 && !reachable) {
         E(`謂詞「${k}」在內容裡用了 ${n} 次，但它讀的 ctx.${dep} 【沒有任何 ctxOf 呼叫點會填】`
-          + `（實測最大參數個數 ${ctxArity}）—— 那些條件【結構上永遠為假】，`
+          + `（src/ 裡沒有任何 ctxOf 呼叫點寫了 "${dep}:" 這個鍵）—— 那些條件【結構上永遠為假】，`
           + `用到它的事件永遠不會觸發，而所有測試都會通過。`
           + ` 修法：讓對應的 action 呼叫 ctxOf 時把 ${dep} 傳進去，或別用這個謂詞。`)
         continue
@@ -481,11 +545,28 @@ for (const j of jobs) {
       }
     }
 
-    // 白名單自身也要保鮮：已經有人用了的謂詞不該還掛在例外表裡
-    for (const k of Object.keys(UNUSED_OK)) {
+    /**
+     * ★★ 白名單保鮮：依 onUse 分流，而不是一律給一句「可以移除了」的警告。
+     *
+     * 舊版對【任何】已被使用的白名單謂詞都只 warns.push「可以從 UNUSED_OK 移除了」——
+     * 而 rep 的真相是「這個實例是死的」。於是照設計文件寫一條聲望條件的人，
+     * 會得到一個永不觸發的事件，外加一句【鼓勵他刪掉那行例外註記】的警告。
+     * 方向剛好相反。
+     *
+     * onUse: 'error' ＝ 這個謂詞沒有寫入端，一被使用就是恆假，必須擋。
+     * onUse: 'ok'    ＝ 只是還沒有人用它作為條件，用了就該把它從表裡移除。
+     */
+    for (const [k, spec] of Object.entries(UNUSED_OK)) {
       if (!declared.includes(k)) continue
-      if ((used.get(k) ?? 0) > 0 && !CTX_DEP[k]) {
-        warns.push(`謂詞「${k}」已經有 ${used.get(k)} 個實例，可以從 UNUSED_OK 移除了`)
+      const n = used.get(k) ?? 0
+      if (n === 0) continue
+      if (spec.onUse === 'error') {
+        E(`謂詞「${k}」在內容裡用了 ${n} 次，但 UNUSED_OK 記載它【沒有寫入端】——`
+          + ` 那些條件結構上永遠為假，用到它的事件永遠不會觸發，而所有測試都會通過。`
+          + ` 理由：${spec.why}`
+          + ` 修法：接上寫入端，或別用這個謂詞。`)
+      } else {
+        warns.push(`謂詞「${k}」已經有 ${n} 個實例，可以從 UNUSED_OK 移除了`)
       }
     }
   }
@@ -609,6 +690,224 @@ for (const j of jobs) {
   }
   if (neverRead.length > 0) {
     warns.push(`flag 設了但沒人讀（${neverRead.length} 個，可能是接錯鍵或伏筆未完成）：${neverRead.join('、')}`)
+  }
+}
+
+/**
+ * ⑦ item 雙向斷鏈：被條件讀取但【沒有任何取得通道】＝死事件。
+ *
+ * ★ 這一道的形狀刻意抄 ③（flag 雙向斷鏈）。而它的存在本身就是一個發現：
+ *   ③ 對「flag 讀了沒人設」是 error，訊息還逐字寫「該事件是死事件，永遠不會觸發」，
+ *   而【完全同一個形狀】的 item 版本零檢查——
+ *   一個不在任何 node.sells、沒有任何 gain.item、也不是開場物的物品，
+ *   可以大方地當事件的 requires.has.item，那個事件就是死的，而八道閘全綠。
+ *   既有的檢查只做 `has.item → 物品存在` 的單向拼字。
+ *
+ * 取得通道只有三條（grep 實證）：node.sells（buy 的唯一入口被 here.sells 鎖住）、
+ * 事件的 gain.item、以及開場六選三的 PICKABLE。
+ */
+{
+  const obtainable = new Set()
+  for (const n of nodes) for (const it of n.sells ?? []) obtainable.add(it)
+  for (const ev of events) for (const ch of ev.choices ?? []) if (ch.gain?.item) obtainable.add(ch.gain.item)
+  const pick = anchor(/const PICKABLE[^=]*=\s*\[([\s\S]*?)\]/, srcOf('src/ui/App.tsx'),
+    '在 App.tsx 找不到 PICKABLE（開場六選三的物品清單）')
+  for (const m of (pick?.[1] ?? '').matchAll(/'([^']+)'/g)) obtainable.add(m[1])
+
+  /**
+   * ★ canAfford 刻意【不算】「需要持有」：它查的是錢包夠不夠，
+   *   是拿物價當基準的寫法（例如結局用租約的價格表示「下一輪的租金已經在桌上」）。
+   *   把它算成需要持有，這道閘一上線就誤報。
+   */
+  const needed = new Map()
+  const wantItem = (c, where) => {
+    if (!c || typeof c !== 'object') return
+    if (c.has?.item) needed.set(c.has.item, where)
+    for (const sub of [...(c.all ?? []), ...(c.any ?? []), ...(c.not ? [c.not] : [])]) wantItem(sub, where)
+  }
+  for (const ev of events) {
+    wantItem(ev.requires, ev.id); wantItem(ev.where, ev.id); wantItem(ev.when, ev.id)
+    for (const [i, ch] of (ev.choices ?? []).entries()) {
+      wantItem(ch.requires, `${ev.id} choice[${i}]`)
+      if (ch.spend?.item) needed.set(ch.spend.item, `${ev.id} choice[${i}] 的 spend`)
+    }
+  }
+  for (const j of jobs) wantItem(j.requires, j.id)
+  for (const e of endings) wantItem(e.requires, e.id)
+
+  for (const [id, where] of needed) {
+    if (obtainable.has(id)) continue
+    E(`item「${id}」被 ${where} 的條件讀取，但【沒有任何取得通道】——`
+      + ` 不在任何 node.sells、沒有任何事件的 gain.item、也不是開場六選三之一。`
+      + ` 那是死事件，永遠不會觸發（比照 ③ flag 雙向斷鏈的同一個形狀）。`)
+  }
+}
+
+/**
+ * ⑧ node.services 的值域與讀取端。
+ *
+ * ★ 這道閘要處理的是一個【假直覺】：寫了 service 就以為那個設施會存在。
+ *   實測：資料裡 20 種 service 值，src 真正讀到的只有 5 種。
+ *   而打錯字的後果是靜默的——`sleep-room` 打錯 → 12 銅單間那顆按鈕整顆不 render，
+ *   沒有任何替代路徑、也沒有任何閘會紅（實測九閘全綠）。
+ *
+ * ★ DECORATIVE_OK 逼出 15 個「寫下來的決定」，這正是 UNUSED_OK 已經證明有效的模式：
+ *   不是讓檢查閉嘴，是把「這個值目前只是氛圍」變成一句可查的話。
+ */
+{
+  const blk = anchor(/export const SERVICES[^=]*=\s*\[([\s\S]*?)\]\s*as const/, srcOf('src/engine/types.ts'),
+    '在 types.ts 找不到 export const SERVICES 詞彙表')
+  const VOCAB = new Set([...((blk?.[1]) ?? '').matchAll(/'([^']+)'/g)].map((m) => m[1]))
+  /**
+   * ★★ 讀取端只認【真正的讀取寫法】，不做寬鬆的字串包含。
+   *
+   * 第一版寫 readers.includes(`'${sv}'`)，於是 'buy' 與 'sell' 被判定為「有讀取端」——
+   * 而它們命中的其實是【動作名】（reduce.ts 的 `case 'buy':`、`t: 'buy'`），
+   * 跟 node.services 毫無關係。那是一個偽綠燈，而它出現在一道
+   * 【專門用來抓偽綠燈的閘】裡面，第一次跑就發生。
+   *
+   * 真正的讀取只有兩種形狀：
+   *   ① 字面：here.services.includes('sleep-bunk')
+   *   ② 動態：node.services.includes(def.service) —— 值來自 mind.ts 的 CLEAN 表
+   */
+  const srcAll = srcOf('src/ui/App.tsx') + srcOf('src/engine/mind.ts')
+    + srcOf('src/engine/reduce.ts') + srcOf('src/engine/map.ts')
+  const readServices = new Set()
+  for (const m of srcAll.matchAll(/services\??\.includes\(\s*'([^']+)'\s*\)/g)) readServices.add(m[1])
+  // 動態讀取：CLEAN 表的 service 欄位（wash / well / rinse）
+  const cleanBlk = anchor(/export const CLEAN[^=]*=\s*\{([\s\S]*?)\n\}/, srcOf('src/engine/mind.ts'),
+    '在 mind.ts 找不到 export const CLEAN 表（services 的動態讀取端）')
+  for (const m of ((cleanBlk?.[1]) ?? '').matchAll(/service:\s*'([^']+)'/g)) readServices.add(m[1])
+  const AMBIENCE = '氛圍標記：這個設施【目前沒有對應的動作】。'
+  const DECORATIVE_OK = {
+    buy: AMBIENCE + '商店面板是由 node.sells 渲染的，不看這個值。',
+    sell: AMBIENCE + '賣出是由 item.sellCopper 決定的，不看這個值。',
+    alms: AMBIENCE + '救濟隊是一份 job（job-cathedral-alms），由 job.at 定位，不看這個值。',
+    craft: AMBIENCE + '寂裔工藝尚未有玩家可執行的動作。',
+    repair: AMBIENCE + '修理尚未實作（P2 的器物耐久度）。',
+    'sell-metal': AMBIENCE + '賣鑰匙鋼走一般的 sell 動作與 item.sellCopper。',
+    'buy-blackmarket': AMBIENCE + '黑市與一般商店走同一條 buy 路徑，差別只在 sells 的內容與價格。',
+    'food-cheap': AMBIENCE + '食物由 node.sells 決定，這個值只表達「這裡的東西便宜」。',
+    'food-cheapest': AMBIENCE + '同上。',
+    drink: AMBIENCE + '烈酒尚未實作。',
+    'sleep-rough': AMBIENCE + '露宿在任何節點都可以（不需要設施），所以它不該是一個條件。',
+    'job-dayhire': AMBIENCE + '工作一律由 job.at 定位；這四個 job-* 值是給人讀的索引，不是機制。',
+    'job-errand': AMBIENCE + '同上。',
+    'job-rake': AMBIENCE + '同上。',
+    'job-rope': AMBIENCE + '同上。',
+  }
+  for (const n of nodes) {
+    for (const sv of n.services ?? []) {
+      if (!VOCAB.has(sv)) {
+        E(`node ${n.id}: service「${sv}」不在 types.ts 的 SERVICES 詞彙表 ——`
+          + ` 多半是拼錯，而拼錯的後果是那個設施的按鈕【靜默不 render】。`)
+        continue
+      }
+      if (!readServices.has(sv) && !(sv in DECORATIVE_OK)) {
+        E(`service「${sv}」在 src 沒有任何讀取端 —— 寫了 service 卻沒有那個設施，`
+          + ` 會讓「寫了就會有」變成假直覺。請接上讀取端、刪掉它，`
+          + ` 或在 validate-data 的 DECORATIVE_OK 補一行【寫明理由】。`)
+      }
+    }
+  }
+  // 詞彙表自身保鮮：列在 DECORATIVE_OK 但其實已經有讀取端了
+  for (const sv of Object.keys(DECORATIVE_OK)) {
+    if (readServices.has(sv)) warns.push(`service「${sv}」已經有讀取端，可以從 DECORATIVE_OK 移除了`)
+  }
+}
+
+/**
+ * ⑨ conditions.json 的每個葉鍵都必須有【讀取端】。
+ *
+ * ★ 鐵律 5「敘事文本一律在 data」只寫在 .md 裡，沒有寫在會 exit 1 的地方。
+ *   而它已經出過一次事：sanity.rows 的 12 條中文文案從第一天起沒有任何讀取端，
+ *   而死亡回溯的決策鏈一路印內部英文鍵（「心理｜roughNight｜理智 -4」）給玩家看。
+ *   內容寫了、出貨了，而引擎印的是鍵名。
+ *
+ * ★ 別名讀法必須支援（`const T = idx.text.treat` 之後用 `T.herbs`），
+ *   否則這道閘一上線就誤報整組 treat.*。
+ */
+{
+  const readers = srcOf('src/ui/App.tsx') + srcOf('src/engine/reduce.ts')
+    + srcOf('src/engine/mind.ts') + srcOf('src/engine/body.ts') + srcOf('src/engine/map.ts')
+  const flat = (o, pre = []) => Object.entries(o).flatMap(([k, v]) => (
+    v && typeof v === 'object' && !Array.isArray(v) ? flat(v, [...pre, k]) : [[...pre, k].join('.')]
+  ))
+  /**
+   * ★★ 動態索引的群組要做【雙向對應】，不能只問「有沒有讀取端」。
+   *
+   * sanity.rows 是用 `rowText[row.key]` 讀的，所以「有讀取端」對那個群組底下的
+   * 【任何】鍵都成立——包含一個根本沒有人會產生的鬼鍵。第一版就是這樣放行的。
+   *
+   * 正解是比對兩個集合：資料裡的鍵 ≡ 引擎會產生的鍵。它同時抓兩個方向，
+   * 而【第二個方向就是剛修掉的那個 bug】：
+   *   · 資料有、引擎不產生 → 死文案（寫了永遠不會顯示）
+   *   · 引擎產生、資料沒有 → 玩家會看到內部英文鍵
+   *     （死亡回溯一路印「心理｜roughNight｜理智 -4」就是這一個方向）
+   */
+  const DYNAMIC_GROUPS = {
+    'sanity.rows': {
+      from: 'src/engine/mind.ts',
+      // settleDay 裡的 add('roughNight', …) —— 每一個 key 都是一行日界結算
+      pattern: /\badd\(\s*'([^']+)'/g,
+      what: 'mind.ts 的 settleDay 用 add(key, delta) 產生的日界結算行',
+    },
+  }
+  const dynamicHandled = new Set()
+  for (const [group, spec] of Object.entries(DYNAMIC_GROUPS)) {
+    const node = group.split('.').reduce((o, k) => (o ?? {})[k], conditions)
+    if (!node || typeof node !== 'object') {
+      E(`validate-data ⑨：conditions.json 找不到動態群組「${group}」——`
+        + ` 若它被改名或刪除，這道雙向對應會靜默失效。`)
+      continue
+    }
+    const emitted = new Set([...srcOf(spec.from).matchAll(spec.pattern)].map((m) => m[1]))
+    const inData = new Set(Object.keys(node))
+    for (const k of inData) {
+      dynamicHandled.add(`${group}.${k}`)
+      if (!emitted.has(k)) {
+        E(`conditions.json 的「${group}.${k}」是死文案 —— ${spec.what} 從來不會產生這個鍵，`
+          + ` 所以那段文字永遠不會顯示給玩家。`)
+      }
+    }
+    for (const k of emitted) {
+      if (!inData.has(k)) {
+        E(`★ ${spec.what} 會產生「${k}」，但 conditions.json 的 ${group} 沒有對應文案 ——`
+          + ` 玩家會在畫面上看到內部英文鍵「${k}」。`
+          + `（這正是死亡回溯一路印「心理｜roughNight｜理智 -4」的那個缺陷。）`)
+      }
+    }
+  }
+
+  /**
+   * ★★ 這一段是【啟發式的，有已知的漏判】，必須誠實記下來。
+   *
+   * 它問「葉鍵名有沒有出現在 src 裡」，而短的／常見的鍵名會被無關的屬性存取誤命中：
+   *   · `sanity.bands.ok`  被 `r.ok` / `res.ok` 命中（全 src 到處都是）
+   *   · `treat.does`       被任何 `.does` 命中
+   * 所以它抓得到 `warmth.note` 這種較獨特的名字，抓不到 `ok`。
+   *
+   * ★ 這與同一輪抓到的另一個偽綠燈是同一形狀：service 的 'buy' 被動作名 `t: 'buy'` 命中。
+   *   我沒有把它修成「更聰明的猜測」，因為那條路已經證明會製造偽綠燈。
+   *
+   * 真正 sound 的替代方案是【行為式覆蓋】：讓讀取一律經過一個會記錄鍵的 helper，
+   * 在煙霧測試裡斷言覆蓋率。那與 live-reach 是同一個路子，排在它後面。
+   * 在那之前，這一段是一個【會抓到一些、不保證抓完】的工具，而
+   * DYNAMIC_GROUPS 的雙向對應才是這道閘裡唯一 sound 的部分。
+   */
+  const TEXT_OK = {}
+  for (const key of flat(conditions)) {
+    if (key.startsWith('_')) continue // _src 之類的中介資料
+    if (dynamicHandled.has(key)) continue // 已由雙向對應處理
+    const parts = key.split('.')
+    const leaf = parts[parts.length - 1]
+    const group = parts.slice(0, -1).join('.')
+    const hit = readers.includes(`.${leaf}`) || readers.includes(`['${leaf}']`)
+      || readers.includes(`text.${group}`) || readers.includes(`[${leaf}]`)
+    if (!hit && !(key in TEXT_OK)) {
+      E(`conditions.json 的「${key}」在 src 找不到任何讀取端 —— 那段文字永遠不會顯示給玩家。`
+        + ` 修法：接上讀取端、刪掉它，或在 validate-data 的 TEXT_OK 補一行【寫明理由】。`)
+    }
   }
 }
 

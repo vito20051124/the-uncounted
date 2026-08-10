@@ -43,8 +43,32 @@ export interface StepResult {
 
 const clamp = (v: number) => Math.max(0, Math.min(100, v))
 
-export function ctxOf(s: GameState, idx: Index, onEdge?: EdgeId, justTurned?: ReturnType<typeof tideAt>): Ctx {
-  return { s, idx, onEdge, tide: tideAt(s.clock.minute), tideJustTurned: justTurned }
+/**
+ * 建 Ctx。
+ *
+ * ★★ 選用欄位刻意用【具名物件】而不是位置參數，理由是驗證器：
+ *
+ * validate-data ⑥ 要判斷「一個讀 ctx.onEdge 的謂詞有沒有可能為真」，
+ * 而它唯一能問的問題是「有沒有人把那個欄位填進來」。
+ * 位置參數的版本只能數【參數個數】，而那個抽象是錯的，被三種方式繞過：
+ *   ① `Readonly<GameState>` 之類的型別包裝讓宣告本體被算成一個四參數呼叫點
+ *   ② 新增第三個選用欄位時，硬寫的對照表查不到它 → 自動判定為可達
+ *   ③ 全域取最大：在任何一處傳第三個參數，就讓整個謂詞被判定為可達，
+ *      即使【抽事件】的那個呼叫點根本沒帶邊
+ *
+ * 改成具名物件之後，驗證器問的是「ctxOf 的實參物件裡有沒有出現 `onEdge:` 這個鍵」——
+ * 鍵名就是欄位名，對型別包裝免疫、新增欄位自動生效。
+ *
+ * ★ ③ 那個繞法靠靜態分析關不掉（它需要知道哪個呼叫點餵給 drawEvent）。
+ *   關它的是另外兩層：UNUSED_OK 的 `onUse: 'error'`（一有內容使用就報錯，
+ *   不管靜態推算怎麼說），以及日後 live-reach 的「每個事件至少進候選池一次」。
+ */
+export function ctxOf(
+  s: GameState,
+  idx: Index,
+  extra: { onEdge?: EdgeId; tideJustTurned?: ReturnType<typeof tideAt> } = {},
+): Ctx {
+  return { s, idx, onEdge: extra.onEdge, tide: tideAt(s.clock.minute), tideJustTurned: extra.tideJustTurned }
 }
 
 function countItem(s: GameState, item: ItemId): number {

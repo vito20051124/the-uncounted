@@ -14,12 +14,13 @@
     "validate": "node scripts/validate-data.mjs",
     "smoke": "node scripts/smoke.ts",
     "pareto": "node scripts/pareto-check.ts",
-    "check": "node scripts/build-data.mjs --check && node scripts/validate-data.mjs && tsc --noEmit && node scripts/pareto-check.ts && node scripts/unit-test.ts && node scripts/reach-test.ts && node scripts/smoke.ts && node scripts/save-test.ts && node scripts/balance.ts 200",
+    "check": "node scripts/build-data.mjs --check && node scripts/cond-sat-test.mjs && node scripts/validate-data.mjs && tsc --noEmit && node scripts/pareto-check.ts && node scripts/unit-test.ts && node scripts/reach-test.ts && node scripts/smoke.ts && node scripts/save-test.ts && node scripts/balance.ts 200",
     "balance": "node scripts/balance.ts 300",
     "save-test": "node scripts/save-test.ts",
     "unit-test": "node scripts/unit-test.ts",
     "build:data": "node scripts/build-data.mjs",
-    "reach-test": "node scripts/reach-test.ts"
+    "reach-test": "node scripts/reach-test.ts",
+    "cond-sat-test": "node scripts/cond-sat-test.mjs"
   },
   "dependencies": {
     "preact": "^10.24.3"

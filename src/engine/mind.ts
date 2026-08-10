@@ -43,7 +43,7 @@
  */
 
 import { stageOf } from './body.ts'
-import type { GameState } from './types.ts'
+import type { GameState, Service } from './types.ts'
 
 // ─────────────────────── 慾望：沒有槽 ───────────────────────
 
@@ -257,7 +257,8 @@ export interface CleanDef {
   sanity: number
   maxPerDay: number
   /** 節點必須有這個 service 才提供 */
-  service: string
+  /** ★ 型別綁 SERVICES 詞彙表：打錯字在 tsc 就會紅，不必等到按鈕靜默不 render */
+  service: Service
 }
 export const CLEAN: Record<CleanKind, CleanDef> = {
   rinse: { hygiene: 12, minutes: 20, copper: 0, stamina: 5, sanity: 0, maxPerDay: 2, service: 'rinse' },

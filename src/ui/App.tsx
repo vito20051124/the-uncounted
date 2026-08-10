@@ -46,10 +46,20 @@ const content = {
 const IDX = buildIndex(content)
 
 
-const NEEDS: Array<[keyof typeof DECAY_PER_MIN, string]> = [
-  ['satiety', '飽食'], ['hydration', '水分'], ['stamina', '精力'],
-  ['warmth', '體溫'], ['hygiene', '清潔'], ['sanity', '理智'],
+/**
+ * 六條需求的顯示順序。
+ *
+ * ★ 中文名【不寫在這裡】——它在 conditions.json 的 needs.<key>.what。
+ *   舊版兩邊各寫一份「飽食／水分／…」，而 UI 用的是這裡硬寫的那一份，
+ *   於是 data 那一份是死文案（鐵律 5：敘事文本一律在 data）。
+ *   建置期 ⑨ 抓到的六個 needs.*.what 就是這件事。
+ */
+const NEED_ORDER: Array<keyof typeof DECAY_PER_MIN> = [
+  'satiety', 'hydration', 'stamina', 'warmth', 'hygiene', 'sanity',
 ]
+const needName = (k: keyof typeof DECAY_PER_MIN) => IDX.text.needs[k]?.what ?? k
+const NEEDS: Array<[keyof typeof DECAY_PER_MIN, string]> =
+  NEED_ORDER.map((k) => [k, needName(k)])
 const EDIBLE: Record<ItemId, string> = {
   'item-rye-bread': '吃掉', 'item-fish-barley': '吃掉', 'item-candy': '吃一顆', 'item-well-water': '喝掉',
 }
@@ -349,8 +359,13 @@ export function App() {
               {cold && <div class="sn sn-cold"><b>冷</b>　不致命，但會讓傷口更容易化膿、睡不好。</div>}
               {s.needs.sanity < 60 && (
                 <div class="sn sn-mind">
+                  {/* ★ 三帶的整句文案在 conditions.json 的 sanity.bands，
+                      而舊版只印這裡硬寫的短標籤，那三句話從第一天起沒有人讀。 */}
                   <b>{bandOf(s.needs.sanity) === 'spent' ? '空了' : '勉強'}</b>　
                   不致命，但走路多耗 {Math.round((fatigueMul(s.needs.sanity) - 1) * 100)}% 體力、說話多花時間。
+                  <div class="need-explain" style="margin-top:4px">
+                    {IDX.text.sanity.bands[bandOf(s.needs.sanity)]}
+                  </div>
                 </div>
               )}
             </div>
@@ -796,6 +811,7 @@ export function App() {
                     {info && (
                       <div class="need-explain">
                         {info.does}<br /><span class="exits">回復：{info.exits}</span>
+                        {k === 'warmth' && <><br />{IDX.text.warmth.note}</>}
                       </div>
                     )}
                   </>

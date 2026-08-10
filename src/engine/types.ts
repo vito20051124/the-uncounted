@@ -85,6 +85,30 @@ export interface Cond {
 
 // ─────────────────────────── 內容資料 ───────────────────────────
 
+/**
+ * ★★ 節點設施的【封閉詞彙表】。
+ *
+ * 加它的理由：`services` 原本是 `string[]`，於是
+ *   · 打錯字沒有任何人會發現（`wash` 打成 `wasch` → 洗滌場的按鈕靜默不 render）
+ *   · 而 tsc 也幫不上忙，因為 data/*.json 一律 `as Content` 硬轉，
+ *     JSON 的值對型別是不透明的
+ *
+ * ★ 更重要的是它讓一件事變得可查：資料裡有 20 種 service 值，
+ *   而 src 真正讀到的只有 5 種（wash/well/rinse 走 mind.ts 的 CLEAN 表，
+ *   sleep-bunk/sleep-room 在 App.tsx）。其餘 15 種是純裝飾。
+ *   validate-data 會逼每一種都給出「有讀取端」或「寫下來的理由」二選一——
+ *   否則「寫了 service 就會有那個設施」會變成一個假直覺。
+ */
+export const SERVICES = [
+  // 有讀取端的（機制）
+  'wash', 'well', 'rinse', 'sleep-bunk', 'sleep-room',
+  // 目前為氛圍標記
+  'buy', 'sell', 'alms', 'craft', 'repair', 'sell-metal', 'buy-blackmarket',
+  'food-cheap', 'food-cheapest', 'drink', 'sleep-rough',
+  'job-dayhire', 'job-errand', 'job-rake', 'job-rope',
+] as const
+export type Service = typeof SERVICES[number]
+
 export interface WorldNode {
   id: NodeId
   name: string
@@ -92,7 +116,7 @@ export interface WorldNode {
   elevation: number // 公尺
   security: 1 | 2 | 3 | 4 // 1 最嚴，4 為城防死角
   outsideWalls?: boolean
-  services: string[]
+  services: Service[]
   /** 此地販售的商品（★ 必須明列。原本靠 services 猜，導致任何地點都能買到全部商品） */
   sells: ItemId[]
   /** 此地收購的物品 */
