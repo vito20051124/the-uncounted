@@ -180,7 +180,7 @@ export function quoteMinutes(s: GameState, base: number): number {
   return Math.round(base * fatigueMul(s.needs.sanity))
 }
 
-function applyMinutes(s: GameState, minutes: number, mode: 'awake' | 'asleep' = 'awake'): GameState {
+function applyMinutes(s: GameState, minutes: number, idx: Index, mode: 'awake' | 'asleep' = 'awake'): GameState {
   let cur = s
   let left = minutes
   while (left > 0) {
@@ -199,7 +199,7 @@ function applyMinutes(s: GameState, minutes: number, mode: 'awake' | 'asleep' = 
 
     // ★ 日界結算。advanceTime 一直有回傳 crossedMidnight，而全 repo 從來沒有人讀它
     //   ——這是它第一次有用途。掛在日界而不是 sleep，否則就是 §8 根因一的原地復發。
-    if (crossedMidnight) cur = settleMind(cur)
+    if (crossedMidnight) cur = settleMind(cur, idx)
 
     // 跨過致死門檻就停在這一段，剩下的時間不再推進
     if (stageOf('thirst', dep.thirstMinutes) === 3 || stageOf('starve', dep.starveMinutes) === 3) break
@@ -218,7 +218,7 @@ const setDayFlag = (s: GameState, k: string, n = 1): GameState => ({
  * 注意：此刻 clock 已經是【新的一天】，而要結算的是【昨天】的行為旗標，
  * 故旗標用 day − 1 去讀。
  */
-function settleMind(s: GameState): GameState {
+function settleMind(s: GameState, idx: Index): GameState {
   const y = s.clock.day - 1
   const had = (k: string) => (s.stats.jobAttempts[`${y}|${k}`] ?? 0) > 0
   const cleanedBonus = (s.stats.jobAttempts[`${y}|cleanBonus`] ?? 0)
@@ -233,8 +233,24 @@ function settleMind(s: GameState): GameState {
     needs: { ...s.needs, sanity: res.sanity },
     mind: { ...s.mind, lastShelter: null },
   }
+  /**
+   * ★★ 這裡本來印的是 `${row.key}` —— 也就是內部的英文鍵，直接給玩家看：
+   *     「心理｜roughNight｜理智 -4」
+   *
+   * 而 conditions.json 的 sanity.rows 【本來就有全部 12 條中文文案】
+   *（「在外面睡了一夜」「身上髒到自己都聞得到」「吃到一頓熱的」…），
+   * 它們從第一天起就沒有任何讀取端。mind.ts 對 DayLedgerRow.key 的註解
+   * 寫著「給 conditions.json 取文本用的鍵」——那一步從來沒有接上。
+   *
+   * 內容寫了、出貨了、而引擎印的是鍵名。這正是「宣告不等於驗收」的形狀，
+   * 而它出現在【死亡回溯的決策鏈】上——那是本作最需要讀得懂的一個畫面。
+   *
+   * ★ 我自己在跑分輸出裡看過「心理｜bunkNight｜理智 +0.9」而讀了過去。
+   */
+  const rowText = idx.text.sanity?.rows ?? {}
   for (const row of res.rows) {
-    out = { ...out, ledger: ledger(out, out, '心理', `${row.key}｜理智 ${row.delta > 0 ? '+' : ''}${row.delta}`, row.exits, 'body') }
+    const label = rowText[row.key] ?? row.key
+    out = { ...out, ledger: ledger(out, out, '心理', `${label}｜理智 ${row.delta > 0 ? '+' : ''}${row.delta}`, row.exits, 'body') }
   }
   return out
 }
@@ -438,7 +454,7 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
         cur = cur === e.a ? e.b : e.a
       }
 
-      s = applyMinutes(s, totalMin)
+      s = applyMinutes(s, totalMin, idx)
       s = {
         ...s,
         at: cur,
@@ -496,7 +512,7 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
       const nth = s.stats.jobAttempts[akey]!
       const hired = roll(s.meta.seed, 'job', p, job.id, s.clock.day, nth)
       if (!hired) {
-        s = applyMinutes(s, 45)
+        s = applyMinutes(s, 45, idx)
         s = {
           ...s,
           stats: { ...s.stats, wastedTrips: s.stats.wastedTrips + 1 },
@@ -521,7 +537,7 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
           jobHurt.push(r.injury)
         }
       }
-      s = applyMinutes(s, job.minutes)
+      s = applyMinutes(s, job.minutes, idx)
       const needs = { ...s.needs }
       for (const k of Object.keys(job.costs) as NeedKey[]) {
         needs[k] = clamp(needs[k] + (job.costs[k] ?? 0))
@@ -586,7 +602,7 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
         log.push(`你買不起${it.name}。`)
         break
       }
-      s = applyMinutes(s, 10)
+      s = applyMinutes(s, 10, idx)
       s = {
         ...s,
         purse: { copper: s.purse.copper - it.priceCopper },
@@ -602,7 +618,7 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
       const it = must(idx.item, a.item, '物品')
       const price = it.sellCopper ?? 0
       if (countItem(s, a.item) <= 0 || price <= 0) break
-      s = applyMinutes(s, 15)
+      s = applyMinutes(s, 15, idx)
       s = {
         ...s,
         purse: { copper: s.purse.copper + price },
@@ -617,7 +633,7 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
     case 'useItem': {
       const it = must(idx.item, a.item, '物品')
       if (countItem(s, a.item) <= 0) break
-      s = applyMinutes(s, 5)
+      s = applyMinutes(s, 5, idx)
       const needs = { ...s.needs }
       if (a.item === 'item-rye-bread') needs.satiety = clamp(needs.satiety + 70)
       if (a.item === 'item-fish-barley') {
@@ -640,7 +656,7 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
       // ★ 與事件的 gain.treatInjury 共用同一份實作，避免兩條路徑再度分歧
       const res = applyTreatment(s, a.injury, a.using, idx)
       if (!res.ok) { if (res.text) log.push(res.text); break }
-      s = applyMinutes(res.s, 20)
+      s = applyMinutes(res.s, 20, idx)
       log.push(res.text)
       s = { ...s, ledger: ledger(s, before, '處理傷口', `${inj.type}｜${res.detail}`, [idx.text.alternatives.treatSkip ?? '不處理']) }
       break
@@ -657,7 +673,7 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
       //   睡眠會跨午夜而觸發日界結算，而結算要讀的正是「昨夜睡在哪」。
       //   寫在後面的話，住宿的加減永遠晚一夜才被算到——煙霧測試 ㉔ 抓到的就是這個。
       s = { ...s, mind: { ...s.mind, lastShelter: a.kind } }
-      s = applyMinutes(s, toDawn, 'asleep')
+      s = applyMinutes(s, toDawn, idx, 'asleep')
       // ★ 體溫必須有【出口】。舊版 rough −25 而 bunk/room 都是 0，
       //   於是不帶打火機的人 warmth 只減不增，是一條純單向槽——
       //   而 UI 同時在紅框裡宣稱「再不處理會死」。付錢買分級遮蔽是正典行為
@@ -716,7 +732,7 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
       const k = attemptKey(s.clock.day, `talk:${npc.id}`)
       const cur = s.npcs[npc.id] ?? { acquaintance: 0, trust: 0, affection: 0, lastSeenDay: null, knownFacts: [] }
       // 理智低 → 連說話都更花時間（fatigueMul）。按鈕上印的是同一個函式的值。
-      s = applyMinutes(s, quoteMinutes(s, 30))
+      s = applyMinutes(s, quoteMinutes(s, 30), idx)
       s = {
         ...s,
         npcs: {
@@ -755,7 +771,7 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
       }
       if (s.purse.copper < def.copper) { log.push('你付不起。'); break }
       const beforeP = quoteSuppuration(s, 'none')
-      s = applyMinutes(s, def.minutes)
+      s = applyMinutes(s, def.minutes, idx)
       s = {
         ...s,
         purse: { copper: s.purse.copper - def.copper },
@@ -789,7 +805,7 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
       const key = 'unwind'
       if ((s.stats.jobAttempts[attemptKey(s.clock.day, key)] ?? 0) >= 1) { log.push('今天已經這樣待過一次了。'); break }
       const g = UNWIND_GAIN
-      s = applyMinutes(s, UNWIND_MINUTES)
+      s = applyMinutes(s, UNWIND_MINUTES, idx)
       s = {
         ...s,
         needs: {
@@ -806,7 +822,7 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
     }
 
     case 'wait': {
-      s = applyMinutes(s, a.minutes)
+      s = applyMinutes(s, a.minutes, idx)
       log.push(`你等了 ${a.minutes} 分鐘。`)
       s = { ...s, ledger: ledger(s, before, '等待', `${a.minutes} 分鐘`, ['做點別的']) }
       break
@@ -827,7 +843,7 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
         break
       }
       const mins = ch.cost?.minutes ?? 0
-      s = applyMinutes(s, mins)
+      s = applyMinutes(s, mins, idx)
       const needs = { ...s.needs }
       // ★★ 這裡原本硬寫五個鍵，於是事件寫 cost.sanity 會被【靜默丟棄】，
       //    而 resultText 照樣回饋「你好一點了」——與 ev-wound-notice 那個

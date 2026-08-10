@@ -51,8 +51,49 @@ function priceOf(ctx: Ctx, item: ItemId): number | null {
   return ctx.idx.item.get(item)?.priceCopper ?? null
 }
 
+/**
+ * ★★★ 全部合法的謂詞鍵。這是【執行期】的單一來源，
+ * 而 validate-data 會斷言它與 types.ts 的 `Cond` 介面逐鍵相同——
+ * 兩份清單分歧時建置失敗，所以它不會偷偷過期。
+ *
+ * ★ 為什麼需要它（這是本專案目前最嚴重的一個靜默缺陷）：
+ *   evaluate 舊版對【不認識的鍵】不做任何事，然後最後 `return true`。
+ *   於是把 `flag` 打成 `flagg`、或用一個根本不存在的謂詞名，
+ *   後果【不是】那個事件永遠不觸發（那還算好，是死內容），
+ *   而是那條門禁【整條消失】——事件變成無條件可觸發。
+ *
+ *   實測（乾淨的 HEAD）：
+ *     evaluate({ at: 'bh:quays' }, ctx@alley)        → false  ✔
+ *     evaluate({ arrivedFrom: 'bh:quays' }, ctx)     → true   ★ 門禁消失
+ *     evaluate({ zzz: 1 }, ctx)                      → true   ★
+ *     evaluate({ flagg: 'never-set' }, ctx)          → true   ★
+ *
+ *   而 reach-test 只守 16 個登記過的主線事件，其餘 48 個事件的
+ *   「條件寫太鬆」完全沒有人在看。所以防線必須在【求值器自己】。
+ */
+export const COND_KEYS = new Set([
+  'all', 'any', 'not',
+  'at', 'onEdge', 'hours', 'day', 'tide', 'tideJustTurned',
+  'needs', 'copper', 'has', 'injury',
+  'canAfford', 'cannotAfford',
+  'knowsRoutes', 'knowsRoute', 'rep', 'nodeSecurity',
+  'npc', 'npcCount', 'npcOffWage', 'namedAsks', 'wageDays', 'givenAway',
+  'flag',
+])
+
 export function evaluate(cond: Cond | undefined, ctx: Ctx): boolean {
   if (!cond) return true
+  // ★ 大聲失敗，不靜默忽略。一個打錯的謂詞名必須在第一次求值時就炸，
+  //   而不是變成一個「條件看起來寫了、其實不存在」的事件。
+  for (const k of Object.keys(cond)) {
+    if (!COND_KEYS.has(k)) {
+      throw new Error(
+        `[cond] 不認識的謂詞「${k}」。條件物件：${JSON.stringify(cond).slice(0, 120)}\n`
+        + `　　舊版會【靜默忽略】它並回傳 true——也就是那條門禁整條消失、事件無條件觸發。`
+        + `　　多半是拼錯（例如 flag 打成 flagg）。合法謂詞見 cond.ts 的 COND_KEYS。`,
+      )
+    }
+  }
   const { s } = ctx
 
   if (cond.all && !cond.all.every((c) => evaluate(c, ctx))) return false

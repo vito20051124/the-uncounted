@@ -26,6 +26,17 @@ const events = read('events.json')
 const npcs = read('npcs.json')
 const endings = read('endings.json')
 
+/**
+ * ★ 局長度從引擎常數讀，不寫死。
+ *   歷史上 LAST_DAY 在 App.tsx／smoke.ts／balance.ts 各寫過一份 14，
+ *   而 14 → 30 那一次改動漏掉其中一份，直到兩個月後才被發現。
+ */
+const LAST_DAY = (() => {
+  const m = /export const LAST_DAY = (\d+)/.exec(fs.readFileSync(path.join(here, '..', 'src/engine/clock.ts'), 'utf-8'))
+  if (!m) { console.error('★ 在 clock.ts 找不到 export const LAST_DAY —— 局長度相關的檢查無法進行'); process.exit(1) }
+  return Number(m[1])
+})()
+
 const errors = []
 const warns = []
 const nodeIds = new Set(nodes.map((n) => n.id))
@@ -34,6 +45,30 @@ const itemIds = new Set(items.map((i) => i.id))
 const npcIds = new Set(npcs.map((n) => n.id))
 
 const E = (m) => errors.push(m)
+
+// ═══ 讀原始碼判斷行為的共用工具 ═══
+//
+// ★ 兩者都是被自己咬過之後才寫的：
+//   · stripComments：⑥ 曾經把自己註解裡的 ctxOf(s, idx, onEdge?, justTurned?)
+//     當成一個四參數呼叫點，整道「結構上永遠為假」的檢查靜默失效。
+//     而 ⑤ 的兩條原始碼掃描【完全沒有剝註解】——把一行 removeItem 註解掉，
+//     那條消耗通道照樣算存在。同一個錯誤，一個修了一個沒修。
+//   · anchor：掃描錨點失效時【一律 error】。
+//     舊版用 warns.push，而 warns 從不影響 exit code，
+//     而 npm run check 只看 exit code——於是「找不到掃描目標」等於這道檢查
+//     靜默變成 no-op，卻仍然全綠。一道靜默跳過的檢查比沒有檢查更貴：
+//     它會讓人以為那件事被守著。
+const stripComments = (t) => t
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/(^|[^:])\/\/.*$/gm, '$1')
+const srcOf = (p) => { try { return stripComments(fs.readFileSync(path.join(here, '..', p), 'utf-8')) } catch { return '' } }
+const rawOf = (p) => { try { return fs.readFileSync(path.join(here, '..', p), 'utf-8') } catch { return '' } }
+const anchor = (re, txt, what) => {
+  const m = re.exec(txt)
+  if (!m) E(`validate-data 的掃描錨點失效：${what}`
+    + ' —— 這道檢查會【靜默變成 no-op】卻仍然全綠。請同步這裡的正則，或把目標搬回原形狀。')
+  return m
+}
 
 // ① 參照完整性
 for (const e of edges) {
@@ -79,6 +114,22 @@ for (const ev of events) {
   walkCond(ev.requires, ev.id, 'requires')
   if (!Array.isArray(ev.choices) || ev.choices.length === 0) E(`event ${ev.id}: 必須至少有一個 choice`)
   if (!ev.name || ev.name === ev.id) E(`event ${ev.id}: 缺 name（死亡回溯的決策鏈要給人讀，不能顯示內部 id）`)
+  // ★★ weight 的兩個方向都是靜默的死內容，而舊版【零校驗】（grep -c weight = 0）：
+  //   · weight: 0  → pickWeighted 的 x -= Math.max(0, 0) 永不使 x < 0，恆不被抽中
+  //                  （實測進池 8000 次、抽出 0 次；對照 weight 20 抽出 398 次）
+  //   · 整行刪掉 → Math.max(0, undefined) = NaN 使 total = NaN、迴圈永不命中，
+  //                  落到 return weights.length - 1，於是那個事件被抽出 8000/8000
+  //   兩者都是「暫時關掉一個事件」最常見的手法，而八道閘全部放行。
+  if (!Number.isInteger(ev.weight) || ev.weight <= 0) {
+    E(`event ${ev.id}: weight 必須是正整數（現為 ${JSON.stringify(ev.weight)}）——`
+      + ` 0 恆不被抽中；缺失會讓 pickWeighted 落到 NaN 分支而恆被抽中。兩個方向都是靜默的。`)
+  }
+  // cooldownDays 大於局長度 = 「一局只出現一次」的偽裝寫法，應該寫 once: true
+  if (ev.cooldownDays !== undefined
+    && (!Number.isInteger(ev.cooldownDays) || ev.cooldownDays < 0 || ev.cooldownDays > LAST_DAY)) {
+    E(`event ${ev.id}: cooldownDays 必須是 0..${LAST_DAY} 的整數（現為 ${JSON.stringify(ev.cooldownDays)}）——`
+      + ` 大於局長度等於「一局只出現一次」，那應該寫成 once: true 才讀得出意圖。`)
+  }
   for (const [n, ch] of (ev.choices ?? []).entries()) {
     walkCond(ch.requires, ev.id, `choice[${n}].requires`)
     if (ch.gain?.item && !itemIds.has(ch.gain.item)) E(`event ${ev.id} choice[${n}]: gain.item 不存在 → ${ch.gain.item}`)
@@ -218,9 +269,10 @@ for (const j of jobs) {
 //   而賣掉是一次性換錢、不表達「省著用」。若把賣算進去，
 //   任何有 sellCopper 的消耗品都會蒙混過關，這道檢查就白做了。
 {
-  const src = (p) => { try { return fs.readFileSync(path.join(here, '..', p), 'utf-8') } catch { return '' } }
-  const engineSrc = src('src/engine/reduce.ts')
-  const uiSrc = src('src/ui/App.tsx')
+  // ★ 一律剝註解。註解掉一行 removeItem 是最常見的「暫時停用」手法，
+  //   而舊版會把那行註解算成一條真的消耗通道。
+  const engineSrc = srcOf('src/engine/reduce.ts')
+  const uiSrc = srcOf('src/ui/App.tsx')
 
   const channels = new Map() // itemId → [通道說明]
   const note = (id, why) => { if (!channels.has(id)) channels.set(id, []); channels.get(id).push(why) }
@@ -259,7 +311,17 @@ for (const j of jobs) {
 // 沒有任何既有測試能抓到它，因為沒有測試斷言「每個謂詞至少有一個可觸發實例」。
 {
   const typesSrc = (() => { try { return fs.readFileSync(path.join(here, '..', 'src/engine/types.ts'), 'utf-8') } catch { return '' } })()
-  const condBlock = /export interface Cond \{([\s\S]*?)\n\}/.exec(typesSrc)
+  /**
+   * ★ 支援 `export interface Cond extends X {`：舊版的正則要求 Cond 後緊接 " {"，
+   *   於是一次「抽出共用父介面」的重構就會讓整道 ⑥ 失效。
+   *
+   * ★★ 而它【必須走 anchor（error）而不是 warns】。
+   *   第一版我只拿掉了 warns 分支、忘了把 exec 換成 anchor——
+   *   結果錨點失效變成【完全無聲】：整道閘直接跳過，一個字都不印，exit 0。
+   *   那比原本的警告版更糟，而它只在反向測試（把 Cond 改名）時才露出來。
+   */
+  const condBlock = anchor(/export interface Cond(?:\s+extends\s+[^{]+)?\s*\{([\s\S]*?)\n\}/,
+    typesSrc, '在 types.ts 找不到 export interface Cond 的主體')
   const STRUCTURAL = new Set(['all', 'any', 'not'])
 
   /**
@@ -352,10 +414,7 @@ for (const j of jobs) {
   for (const j of jobs) walkKeys(j.requires)
   for (const e of endings) walkKeys(e.requires)
 
-  if (!condBlock) {
-    warns.push('validate-data ⑥：在 types.ts 找不到 `export interface Cond {...}`，謂詞盤點跳過'
-      + '（★ 這道檢查靜默跳過就等於不存在——若型別被搬家請同步這裡）')
-  } else {
+  if (condBlock) {
     const declared = [...condBlock[1].matchAll(/^\s{2}(\w+)\??:/gm)].map((m) => m[1])
       .filter((k) => !STRUCTURAL.has(k))
 
@@ -377,6 +436,51 @@ for (const j of jobs) {
           + ` 兩者都不該靜默存在。請在 validate-data 的 UNUSED_OK 補一行【寫明理由】，或刪掉它。`)
       }
     }
+    /**
+     * ★★★ 反向的反向：內容用了一個 Cond 【沒有宣告】的謂詞。
+     *
+     * 這一項比 ⑥ 原本防的那件事嚴重得多，方向也相反：
+     *   · 原本防的是「謂詞沒人用」→ 死內容（玩家看不到你寫的東西）
+     *   · 這一項防的是「用了一個不存在的謂詞」→ 門禁【整條消失】
+     *
+     * 因為 evaluate 舊版對不認識的鍵不做任何事、最後 return true。
+     * 所以把 flag 打成 flagg，那個事件不是永遠不觸發，是【無條件觸發】。
+     * 而 reach-test 只守 16 個登記過的主線事件，其餘 48 個沒有人在看。
+     *
+     * 根本修法已經下在求值器本身（cond.ts 的 COND_KEYS 會直接拋錯），
+     * 這一道是建置期的第二層：讓它在跑起來之前就被指名道姓地擋下。
+     */
+    for (const [k, n] of used) {
+      if (STRUCTURAL.has(k)) continue
+      if (declared.includes(k)) continue
+      E(`謂詞「${k}」在內容裡用了 ${n} 次，但 Cond 【沒有宣告它】——`
+        + ` 求值器會拋錯（cond.ts 的 COND_KEYS），而在加上那道防線之前它會【靜默回傳 true】，`
+        + ` 也就是那條 where/when/requires 等於沒寫、事件無條件觸發。多半是拼錯。`)
+    }
+
+    /**
+     * ★ 執行期的 COND_KEYS 必須與型別的 Cond 逐鍵相同。
+     *   兩份清單分歧的兩個方向都危險：
+     *   · 型別有、COND_KEYS 沒有 → 一個合法謂詞會在執行期被當成拼錯而拋錯（遊戲當場壞）
+     *   · COND_KEYS 有、型別沒有 → 那個鍵回到「靜默忽略」的舊行為
+     */
+    const condSrc = srcOf('src/engine/cond.ts')
+    const keysBlock = anchor(/export const COND_KEYS = new Set\(\[([\s\S]*?)\]\)/, condSrc,
+      '在 cond.ts 找不到 export const COND_KEYS')
+    if (keysBlock) {
+      const runtime = [...keysBlock[1].matchAll(/'([^']+)'/g)].map((m) => m[1])
+      const missing = [...declared, ...STRUCTURAL].filter((k) => !runtime.includes(k))
+      const extra = runtime.filter((k) => !declared.includes(k) && !STRUCTURAL.has(k))
+      if (missing.length) {
+        E(`cond.ts 的 COND_KEYS 缺少型別 Cond 有宣告的謂詞：${missing.join('、')}`
+          + ` —— 那些謂詞一被使用就會在執行期被誤判為拼錯並拋錯。`)
+      }
+      if (extra.length) {
+        E(`cond.ts 的 COND_KEYS 多出型別 Cond 沒有的鍵：${extra.join('、')}`
+          + ` —— 那些鍵會回到「靜默忽略、回傳 true」的舊行為，也就是門禁消失。`)
+      }
+    }
+
     // 白名單自身也要保鮮：已經有人用了的謂詞不該還掛在例外表裡
     for (const k of Object.keys(UNUSED_OK)) {
       if (!declared.includes(k)) continue
