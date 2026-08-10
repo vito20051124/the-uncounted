@@ -97,7 +97,7 @@
   riskDay: 0.01
   riskNight: 0.01
   knowledge: learned
-  tell: 石階藏在兩座貨棚之間的縫裡，沒有標記。爬上去要一口氣爬完十層樓。
+  tell: 石階藏在兩座貨棚之間的縫裡，沒有標記。爬上去要一口氣爬完十層樓。石窟街沒有水攤。崖上那座水櫃是他們校驗壓力閥用的工具，討一杯喝不會被拒，但沒有人有義務等你。
   src: canon:districts.md 石窟街「設有隱蔽石階直通碼頭」
   climbFactor: 2.5
 - id: e:grotto-market-lane
@@ -109,6 +109,7 @@
   riskDay: 0.02
   riskNight: 0.04
   knowledge: public
+  tell: 石窟街沒有水攤。崖上那座水櫃是他們校驗壓力閥用的工具，討一杯喝不會被拒，但沒有人有義務等你。
   src: canon:districts.md 石窟街主街「緘默長廊」
 - id: e:quays-pans-causeway
   a: bh:quays
@@ -142,6 +143,7 @@
   riskDay: 0.02
   riskNight: 0.09
   knowledge: public
+  tell: 石窟街沒有水攤。崖上那座水櫃是他們校驗壓力閥用的工具，討一杯喝不會被拒，但沒有人有義務等你。
   src: derived:石窟街 +12m 至老鹽街 +5m 之崖下連通
   climbFactor: 2.5
 - id: e:market-pans-southgate
