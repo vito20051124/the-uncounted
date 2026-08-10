@@ -1440,17 +1440,7 @@
             },
             {
               "not": {
-                "any": [
-                  {
-                    "flag": "path-token"
-                  },
-                  {
-                    "flag": "path-forge"
-                  },
-                  {
-                    "flag": "path-vouch"
-                  }
-                ]
+                "flag": "identity-obtained"
               }
             },
             {
@@ -1583,17 +1573,7 @@
             },
             {
               "not": {
-                "any": [
-                  {
-                    "flag": "path-token"
-                  },
-                  {
-                    "flag": "path-forge"
-                  },
-                  {
-                    "flag": "path-vouch"
-                  }
-                ]
+                "flag": "identity-obtained"
               }
             }
           ]
@@ -1620,7 +1600,10 @@
           "minutes": 60
         },
         "gain": {
-          "flag": "path-token",
+          "flag": [
+            "path-token",
+            "identity-obtained"
+          ],
           "npc": {
             "id": "npc-quays-foreman",
             "trust": 25,
@@ -1636,7 +1619,10 @@
           "minutes": 30
         },
         "gain": {
-          "flag": "path-token",
+          "flag": [
+            "path-token",
+            "identity-obtained"
+          ],
           "npc": {
             "id": "npc-quays-foreman",
             "trust": 30,
@@ -1695,17 +1681,7 @@
             },
             {
               "not": {
-                "any": [
-                  {
-                    "flag": "path-token"
-                  },
-                  {
-                    "flag": "path-forge"
-                  },
-                  {
-                    "flag": "path-vouch"
-                  }
-                ]
+                "flag": "identity-obtained"
               }
             }
           ]
@@ -1732,7 +1708,10 @@
           "copper": 60
         },
         "gain": {
-          "flag": "path-forge",
+          "flag": [
+            "path-forge",
+            "identity-obtained"
+          ],
           "npc": {
             "id": "npc-cinder-woman",
             "trust": 20,
@@ -1804,17 +1783,7 @@
             },
             {
               "not": {
-                "any": [
-                  {
-                    "flag": "path-token"
-                  },
-                  {
-                    "flag": "path-forge"
-                  },
-                  {
-                    "flag": "path-vouch"
-                  }
-                ]
+                "flag": "identity-obtained"
               }
             }
           ]
@@ -1835,7 +1804,10 @@
           "minutes": 180
         },
         "gain": {
-          "flag": "path-vouch",
+          "flag": [
+            "path-vouch",
+            "identity-obtained"
+          ],
           "npc": {
             "id": "npc-grotto-elder",
             "trust": 30,
@@ -1851,7 +1823,10 @@
           "minutes": 60
         },
         "gain": {
-          "flag": "path-vouch",
+          "flag": [
+            "path-vouch",
+            "identity-obtained"
+          ],
           "npc": {
             "id": "npc-grotto-elder",
             "trust": 35,

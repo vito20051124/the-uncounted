@@ -19,6 +19,7 @@ import {
 } from './body.ts'
 import { riskFor, staminaFor } from './map.ts'
 import { roll } from './rng.ts'
+import { SAVE_VERSION } from './save.ts'
 import { must, type EdgeId, type GameState, type Index, type ItemId, type JobId, type NeedKey, type NodeId, type NpcDef, type NpcId } from './types.ts'
 
 export type Action =
@@ -508,6 +509,17 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
         }
       }
       s = setDayFlag(s, 'worked')
+      // ★ wageDays 量的是【日數】不是次數——同一天做兩份工只算一天。
+      if (!s.stats.wageDaySeen[String(s.clock.day)]) {
+        s = {
+          ...s,
+          stats: {
+            ...s.stats,
+            wageDays: s.stats.wageDays + 1,
+            wageDaySeen: { ...s.stats.wageDaySeen, [String(s.clock.day)]: true },
+          },
+        }
+      }
       log.push(`你做完了一天的${job.name}，領到 ${job.payCopper} 銅。`)
       s = { ...s, ledger: ledger(s, before, '工作', `${job.name}：+${job.payCopper} 銅`, ['休息', '去別處找工']) }
       for (const h of jobHurt) {
@@ -787,7 +799,11 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
         known = [...known, ch.gain.learnRoute]
         log.push('你記住了這條路。')
       }
-      if (ch.gain?.flag) flags[ch.gain.flag] = true
+      // gain.flag 可為單一字串或陣列（見 types.ts 的註解）
+      for (const f of [ch.gain?.flag ?? []].flat()) flags[f] = true
+      // 三個具名計數器
+      if (ch.gain?.namedAsk) stats.namedAsks += 1
+      if (ch.gain?.giveAway) stats.givenAway += 1
       let npcs = s.npcs
       if (ch.gain?.npc) {
         const g = ch.gain.npc
@@ -869,7 +885,9 @@ export function tideTurn(before: GameState, after: GameState) {
 
 export function initialState(seed: string, at: NodeId, items: ItemId[], idx?: Index): GameState {
   return {
-    meta: { schemaVersion: 2, seed, startedAt: 'C.R. 837 枯收季' },
+    // ★ 版本號只有一個真相來源（save.ts）。第一版在這裡另寫了一個 2，
+    //   而 SAVE_VERSION 升到 3 之後所有存檔測試立刻紅——正是兩個真相來源的典型症狀。
+    meta: { schemaVersion: SAVE_VERSION, seed, startedAt: 'C.R. 837 枯收季' },
     clock: { day: 1, minute: 23 * 60 + 40 },
     at,
     // sanity 初值 50：invented:（正典零錨點）。她剛到，還沒被磨掉，但也已經不好。
@@ -892,6 +910,7 @@ export function initialState(seed: string, at: NodeId, items: ItemId[], idx?: In
       maxStarveMinutes: 0, maxThirstMinutes: 0,
       injuriesTaken: 0, injuriesInfected: 0, injuriesHealed: 0,
       wastedTrips: 0, edgeUse: {}, eventsSeen: [], jobAttempts: {},
+      namedAsks: 0, wageDays: 0, givenAway: 0, wageDaySeen: {},
     },
     dead: null,
     ended: false,

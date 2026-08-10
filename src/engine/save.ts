@@ -28,7 +28,7 @@
 import type { GameState, Index, NeedKey } from './types.ts'
 
 /** 當前存檔格式版本。改動 GameState 形狀時必須 +1 並補一條遷移。 */
-export const SAVE_VERSION = 2
+export const SAVE_VERSION = 3
 
 export interface SaveEnvelope {
   /** 存檔格式版本（不是遊戲版本） */
@@ -83,6 +83,22 @@ export function serialize(s: GameState, now: string, idx?: Index): string {
 type Migration = (o: Record<string, unknown>) => Record<string, unknown>
 
 const MIGRATIONS: Record<number, Migration> = {
+  /**
+   * 2 → 3：第五章結局所需的三個具名計數器。
+   * ★ 舊檔的計數器一律從 0 起算，【不回溯推估】——
+   *   wageDays 若從 ledger 反推會把「落選」也算成上工，
+   *   而那正好是這個計數器最不該包含的東西（它量的是可靠性）。
+   *   誠實的 0 比一個猜出來的數字好：玩家的舊檔會失去進度，
+   *   但不會拿到一個假的成就。
+   */
+  2: (o) => {
+    const stats = (o.stats ?? {}) as Record<string, unknown>
+    return {
+      ...o,
+      meta: { ...(o.meta as object), schemaVersion: 3 },
+      stats: { ...stats, namedAsks: 0, wageDays: 0, givenAway: 0, wageDaySeen: {} },
+    }
+  },
   /**
    * 1 → 2：第五、六輪的狀態形狀改動。
    *

@@ -170,7 +170,7 @@ for (const j of jobs) {
     walkCond(ev.where); walkCond(ev.when); walkCond(ev.requires)
     for (const ch of ev.choices ?? []) {
       walkCond(ch.requires)
-      if (ch.gain?.flag) setFlags.add(ch.gain.flag)
+      for (const f of [ch.gain?.flag ?? []].flat()) setFlags.add(f)
     }
   }
   for (const j of jobs) walkCond(j.requires)
@@ -208,6 +208,21 @@ for (const j of jobs) {
         errors.push(`src/ui/${f}:${i + 1}: UI 不得硬寫機率「${m[0].trim()}」—— 一律呼叫引擎實算（body.quoteSuppuration 等）`)
       }
     })
+  }
+}
+
+// ⑥ ★ 設 path-* 者必須同時設 identity-obtained（兩者不可分歧）
+//    這條缺陷的原貌：design/05_main_story.md 宣告 identity-obtained 為第三章出章 flag，
+//    但它在 events.json 裡出現 0 次——因為 gain.flag 當時只放得下一個字串。
+//    於是第四、五章的閘門讀一個永遠為假的 flag。
+{
+  for (const ev of events) {
+    for (const ch of ev.choices ?? []) {
+      const fs2 = [ch.gain?.flag ?? []].flat()
+      if (fs2.some((f) => /^path-(token|forge|vouch)$/.test(f)) && !fs2.includes('identity-obtained')) {
+        errors.push(`event ${ev.id} 的選項「${ch.label}」設了 path-* 卻沒有同時設 identity-obtained —— 第四、五章的閘門會讀到一個永遠為假的 flag`)
+      }
+    }
   }
 }
 

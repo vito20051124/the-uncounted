@@ -62,6 +62,19 @@ export interface Cond {
   nodeSecurity?: Cmp
   /** NPC 三軸比較：{ npc, axis, cmp } */
   npc?: { id: NpcId; axis: 'acquaintance' | 'trust' | 'affection'; is: Cmp }
+  /**
+   * ★ 「有幾個人認得她」——第五章「平凡」要的是【廣度】而不是深度。
+   * 05_main_story.md 已把 acquaintance 定義為「他認得你的臉」、
+   * affection 定義為「安家線的伴侶；平凡線的鄰人」。深度關係是安家的；
+   * 平凡要的是鄰人——多而不深。這條分工是既有裁決，不是為結局發明的。
+   */
+  npcCount?: { axis: 'acquaintance' | 'trust' | 'affection'; is: Cmp; atLeast: number }
+  /** 有人指名要她手藝的次數 */
+  namedAsks?: Cmp
+  /** 她去上了工的日數（量可靠性，不量成功） */
+  wageDays?: Cmp
+  /** 無償把東西給出去的次數 */
+  givenAway?: Cmp
   flag?: string
 }
 
@@ -192,7 +205,21 @@ export interface JobDef {
 export interface Choice {
   label: string
   cost?: { minutes?: number } & Partial<Record<NeedKey, number>>
-  gain?: { copper?: number; item?: ItemId; learnRoute?: EdgeId; flag?: string; /** ★ 敘事選項也能把人移走。缺這格會讓「繞路走回去」這種選項變成原地不動（試玩實測：因此被困在蒸發池三天渴死）。 */ moveTo?: NodeId;
+  gain?: {
+    copper?: number; item?: ItemId; learnRoute?: EdgeId
+    /**
+     * 一或多個 flag。
+     * ★ 支援陣列是為了修一個真缺陷：`identity-obtained` 在 design/05_main_story.md
+     *   已宣告為第三章的出章 flag，但在 events.json 裡【出現 0 次】——
+     *   因為 gain.flag 只放得下一個字串，而那三個成功分支各自已經佔用了 path-*。
+     *   建置期現在強制「設 path-* 者必須同時設 identity-obtained」，兩者不可能分歧。
+     */
+    flag?: string | string[]
+    /**
+     * ★ 敘事選項也能把人移走。缺這格會讓「繞路走回去」這種選項變成原地不動
+     * （試玩實測：因此被困在蒸發池三天渴死）。
+     */
+    moveTo?: NodeId
     /**
      * ★ 事件選項直接處置傷口。
      * 舊版 ev-wound-notice 寫的是全域 flag `treated-herbs`，
@@ -200,7 +227,12 @@ export interface Choice {
      * 於是玩家付了 1 銅／燒掉一片 OK 繃，化膿率【一點都沒降】，
      * 而遊戲當場回饋「你成功了」。這是最惡劣的一種死法。
      */
-    treatInjury?: 'herbs' | 'sterile'; npc?: { id: NpcId; acquaintance?: number; trust?: number; affection?: number; fact?: string } }
+    treatInjury?: 'herbs' | 'sterile'
+    /** 這一次是「有人指名要她的手藝」 */
+    namedAsk?: boolean
+    /** 這一次是「無償把東西給出去」 */
+    giveAway?: boolean
+    npc?: { id: NpcId; acquaintance?: number; trust?: number; affection?: number; fact?: string } }
   spend?: { copper?: number; item?: ItemId }
   requires?: Cond
   risks?: Array<{ chance: number; tell: string; injury?: string; loseCopper?: number }>
@@ -330,6 +362,24 @@ export interface GameState {
     eventsSeen: EventId[]
     /** 當日已嘗試次數，鍵為 `${day}|${jobId}`（含落選——挑人一天只挑一次） */
     jobAttempts: Record<string, number>
+    /**
+     * ★ 第五章結局所需的三個具名計數器。
+     * 它們刻意是【計數】而不是 flag：結局要問的是「幾次」，不是「有沒有」。
+     *
+     * · namedAsks  有人【指名】要她的手藝的次數。這是 05_main_story.md 早就寫著、
+     *              但從未兌現的那句「有一門別人需要你的手藝」——第 4 層的非階位形式。
+     * · wageDays   她去上了工的【日數】（不是次數）。量的是可靠性，不是成功；
+     *              錨點是陶恩替馬可那一戶寫了十八年同一行字的理由：
+     *              「那一戶從不遲到、也從不多要。」
+     * · givenAway  無償把東西給出去的次數。代價一律是機會成本而不是 1 銅——
+     *              當天唯一的熱食、處置自己傷口用的那塊布、一個工作名額。
+     *              ★ 只計凡俗物；modern:true 的外來之物一律不計（canon/07 §5.2）。
+     */
+    namedAsks: number
+    wageDays: number
+    givenAway: number
+    /** 已計入 wageDays 的日子，避免同一天重複計（鍵為 day） */
+    wageDaySeen: Record<string, boolean>
   }
   dead: null | { day: number; cause: string }
   ended: boolean

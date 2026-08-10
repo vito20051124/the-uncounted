@@ -117,6 +117,13 @@ export function evaluate(cond: Cond | undefined, ctx: Ctx): boolean {
     const v = st ? st[cond.npc.axis] : 0
     if (!cmp(v, cond.npc.is)) return false
   }
+  if (cond.npcCount !== undefined) {
+    const n = Object.values(s.npcs).filter((x) => cmp(x[cond.npcCount!.axis], cond.npcCount!.is)).length
+    if (n < cond.npcCount.atLeast) return false
+  }
+  if (cond.namedAsks !== undefined && !cmp(s.stats.namedAsks, cond.namedAsks)) return false
+  if (cond.wageDays !== undefined && !cmp(s.stats.wageDays, cond.wageDays)) return false
+  if (cond.givenAway !== undefined && !cmp(s.stats.givenAway, cond.givenAway)) return false
   if (cond.flag !== undefined && !s.flags[cond.flag]) return false
 
   return true

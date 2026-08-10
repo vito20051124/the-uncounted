@@ -121,7 +121,11 @@ function played(seed: string, steps = 60): GameState {
     && r.state.injuries[0]!.healDay === null
     && r.state.ledger[0]!.kind === 'action'
     && !('hungryTicks' in (r.state.stats as unknown as Record<string, unknown>))
-  T(3, '★ v1 → v2 遷移：舊格式存檔可讀，且新欄位都補齊',
+    // v2 → v3 新增的三個具名計數器一律從 0 起算（不回溯推估——見 save.ts 註解）
+    && r.state.stats.namedAsks === 0
+    && r.state.stats.wageDays === 0
+    && r.state.stats.givenAway === 0
+  T(3, '★ v1 → v3 逐級遷移：舊格式存檔可讀，且新欄位都補齊',
     ok,
     r.ok
       ? `理智 ${r.state.needs.sanity}／缺水 ${r.state.deprivation.thirstMinutes} 分／傷 stageDay ${r.state.injuries[0]?.stageDay}／ledger.kind ${r.state.ledger[0]?.kind}`
@@ -137,7 +141,7 @@ function played(seed: string, steps = 60): GameState {
     needs: { satiety: 70, hydration: 70, stamina: 80, warmth: 60, hygiene: 50 },
     injuries: [], purse: { copper: 30 }, carry: [], knownRoutes: [], rep: {}, npcs: {},
     flags: {}, eventHistory: {}, ledger: [],
-    stats: { earnedCopper: 0, spentCopper: 0, hungryTicks: 0, thirstyTicks: 0, wastedTrips: 0, edgeUse: {}, eventsSeen: [], jobAttempts: {} },
+    stats: { earnedCopper: 0, spentCopper: 0, hungryTicks: 0, thirstyTicks: 0, wastedTrips: 0, edgeUse: {}, eventsSeen: [], jobAttempts: {}, namedAsks: 0, wageDays: 0, givenAway: 0, wageDaySeen: {} },
     dead: null, ended: false,
   }
   const r = load(JSON.stringify(v1), IDX)
