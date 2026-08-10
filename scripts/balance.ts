@@ -18,6 +18,7 @@ import { buildIndex, type Content, type GameState } from '../src/engine/types.ts
 import { LAST_DAY, tideAt } from '../src/engine/clock.ts'
 import { isIncapacitated } from '../src/engine/body.ts'
 import { CLEAN, canUnwind, type CleanKind } from '../src/engine/mind.ts'
+import { evaluate } from '../src/engine/cond.ts'
 import { affordable, offerRoutes } from '../src/engine/map.ts'
 import { availableChoices, drawEvent } from '../src/engine/events.ts'
 import { attemptsLeft, canTalk, ctxOf, initialState, reduce, type Action } from '../src/engine/reduce.ts'
@@ -38,7 +39,26 @@ const N = Number(process.argv[2] ?? 300)
  * ★ 「小心」與「粗心」兩種政策的死亡率差距，比任何固定的死亡率區間都更能驗收支柱三：
  *   如果兩者差不多，就表示玩家的決定不影響結果——那才是真正的失敗。
  */
-interface Policy { careful: boolean }
+interface Policy {
+  careful: boolean
+  /**
+   * ★ 「會在城裡走動」的政策。
+   *
+   * 加它的理由不是為了讓某個測試變綠，而是因為前兩種政策【在結構上答不了】
+   * 「平凡達不達得到」這個問題：它們的移動目標寫死只有碼頭與市集——
+   * 也就是兩個【有工作的節點】。逐人跑分因此必然是
+   *   老克瓦 100%　穗爾 100%　闕 100%　｜　灰姐 0%　石啞 0%
+   * 這不是「平凡太難」，是量尺量錯了東西。
+   *
+   * 所以三道結局驗收各用【能回答它那個問題的】那一把尺：
+   *   · 「平凡達得到嗎」→ 用會走動的政策（本項）
+   *   · 「平凡是不是活下來就自動送」→ 用純領工資的政策（careful）
+   */
+  roam?: boolean
+}
+/** 會走動的政策要跑遍的四個城區——★ 含兩個【不發工錢】的地方 */
+const ROAM: Array<'bh:quays' | 'bh:market' | 'bh:cinder' | 'bh:grotto'> =
+  ['bh:quays', 'bh:market', 'bh:cinder', 'bh:grotto']
 
 /** 一個「還算會玩」的政策：吃喝、治傷、有工就做、天黑就睡。不是最佳解，是及格線。 */
 function play(seed: string, pol: Policy = { careful: true }): GameState {
@@ -111,14 +131,24 @@ function play(seed: string, pol: Policy = { careful: true }): GameState {
       step({ t: 'sleep', kind, costCopper: kind === 'bunk' ? 3 : 0 }); continue
     }
     const who = [...IDX.npc.values()].find((n) => canTalk(s, n))
-    if (who && rand(seed, 'flavor', steps) < 0.3) { step({ t: 'talk', npc: who.id }); continue }
+    if (who && rand(seed, 'flavor', steps) < (pol.roam ? 0.75 : 0.3)) { step({ t: 'talk', npc: who.id }); continue }
     if (!isIncapacitated(s)) {
       const job = [...IDX.job.values()].find(
         (j) => j.at === s.at && h >= j.when[0] && h < j.when[1] && s.needs.stamina > 35 && attemptsLeft(s, j) > 0
       )
       if (job) { step({ t: 'work', job: job.id }); continue }
     }
-    const target = rand(seed, 'flavor', steps) < 0.5 ? 'bh:quays' : 'bh:market'
+    // ★ 會走動的政策必須是【一個合理的玩家】，不是隨機遊走者。
+    //   第一版寫成「每一步從四區隨機挑一個」，結果死亡率 65%、收入從 295 銅崩到 68——
+    //   因為它整天在爬 +12m 的崖梯，從來沒待在一個地方把工做完。
+    //   那量到的是隨機遊走的代價，不是「想被人認得」的代價。
+    //   正確的形狀：有工就上工；只在【需求安全且還有人不認得她】時，才專程去見那個人。
+    let target: string = rand(seed, 'flavor', steps) < 0.5 ? 'bh:quays' : 'bh:market'
+    if (pol.roam) {
+      const safe = s.needs.hydration > 55 && s.needs.satiety > 55 && s.needs.stamina > 55
+      const stranger = [...IDX.npc.values()].find((n) => (s.npcs[n.id]?.acquaintance ?? 0) < 30)
+      if (safe && stranger && h >= 8 && h < 17) target = stranger.at
+    }
     if (s.at !== target) {
       const rs = offerRoutes(s, IDX, tideAt(s.clock.minute), target).filter((r) => affordable(r, s.needs.stamina))
       if (rs.length > 0) { step({ t: 'travel', route: rs[0]!.edges, alternatives: [] }); continue }
@@ -183,6 +213,63 @@ const sloppyHyg = med(sloppy.map((r) => r.needs.hygiene))
 console.log(`結局理智中位數   ${sloppySanity.toFixed(0)}　（小心 ${carefulSanity.toFixed(0)}）`)
 console.log(`結局清潔中位數   ${sloppyHyg.toFixed(0)}　（小心 ${carefulHyg.toFixed(0)}）`)
 
+// ── 三條結局的達成率 ──
+//
+// ★ 這一段量的不是「機器人會不會選結局」（它不宣告目標），而是
+//   【假如她宣告了那一條，實質條件成不成立】——所以一律注入 aim flag 再求值。
+//
+// ★★ 而它要抓的東西是「平凡」這一條特有的失敗模式：
+//     若每一個活到第三十日的人【自動】滿足平凡，那平凡在機制上就等於
+//     「你活下來了」＝預設值＝那個 else 分支——而那正是 ending.ts 檔頭
+//     花整段篇幅要避免的違憲形狀。它必須明顯低於 100%，否則設計是假的。
+const roam = Array.from({ length: N }, (_, i) => play(`bal-${i}`, { careful: true, roam: true }))
+const roamAlive = roam.filter((s) => !s.dead)
+/** 假如她宣告了那一條，實質條件成不成立（★ 一律注入 aim flag——機器人不宣告目標） */
+const endShare = (aim: string, pool: GameState[]) => {
+  const def = [...IDX.ending.values()].find((e) => e.aim === aim)
+  if (!def) return { pct: 0, n: 0 }
+  const ok = pool.filter((s) => evaluate(def.requires, ctxOf({ ...s, flags: { ...s.flags, [aim]: true } }, IDX)))
+  return { pct: pool.length ? (ok.length / pool.length) * 100 : 0, n: ok.length }
+}
+const faces = (s: GameState) => Object.values(s.npcs).filter((n) => n.acquaintance >= 30).length
+const perNpc = (pool: GameState[]) => [...IDX.npc.values()].map((n) => {
+  const pct = pool.length ? (pool.filter((s) => (s.npcs[n.id]?.acquaintance ?? 0) >= 30).length / pool.length) * 100 : 0
+  return `${n.name} ${pct.toFixed(0)}%`
+}).join('　')
+
+// 純領工資組（careful）——它回答的是「平凡是不是活下來就自動送」
+const wageQuiet = endShare('aim-quiet', alive)
+// 會走動組（roam）——它回答的是「平凡達不達得到」
+const roamQuiet = endShare('aim-quiet', roamAlive)
+console.log(`\n── 三條結局：實質條件達成率（假如她宣告了那一條）──`)
+console.log(`   ┌ 純領工資組（只跑碼頭與市集，${alive.length} 局存活）`)
+console.log(`   │   安家 ${endShare('aim-hearth', alive).pct.toFixed(0)}%　立業 ${endShare('aim-trade', alive).pct.toFixed(0)}%　平凡 ${wageQuiet.pct.toFixed(0)}%`)
+const medWageWage = med(alive.map((s) => s.stats.wageDays))
+console.log(`   │   上工日數中位數 ${medWageWage}／需 18　　認得她的臉 ${med(alive.map(faces))} 人／需 4`)
+console.log(`   │   逐人：${perNpc(alive)}`)
+console.log(`   └ 會走動組（四個城區都去，含兩個不發工錢的地方，${roamAlive.length} 局存活）`)
+console.log(`       安家 ${endShare('aim-hearth', roamAlive).pct.toFixed(0)}%　立業 ${endShare('aim-trade', roamAlive).pct.toFixed(0)}%　平凡 ${roamQuiet.pct.toFixed(0)}%`)
+console.log(`       上工日數中位數 ${med(roamAlive.map((s) => s.stats.wageDays))}／需 18　　認得她的臉 ${med(roamAlive.map(faces))} 人／需 4`)
+console.log(`       逐人：${perNpc(roamAlive)}`)
+console.log(`   ★ 三種政策都【不追劇情線】，故安家（要租約事件）與立業（要被指名兩次）`)
+console.log(`     本就偏低，此處只作參考不設閘——它們的驗收在 reach-test。`)
+
+// ★★ 走動的代價：這一段是上面那張表【逼出來的】問題，不是預先想到的。
+//    會走動組的存活數明顯少於純領工資組，而「平凡」要求的正是走動——
+//    若走動本身高度致命，那平凡就在事實上變成三條裡最難的一條，與設計意圖相反。
+const roamDeadRate = ((roam.length - roamAlive.length) / roam.length) * 100
+const roamCauses = new Map<string, number>()
+for (const s of roam.filter((x) => x.dead)) {
+  const c = s.dead!.cause
+  roamCauses.set(c.includes('脫水') ? '脫水' : c.includes('飢餓') ? '飢餓' : c.includes('敗血') ? '敗血' : c,
+    (roamCauses.get(c.includes('脫水') ? '脫水' : c.includes('飢餓') ? '飢餓' : c.includes('敗血') ? '敗血' : c) ?? 0) + 1)
+}
+const roamEarned = roam.reduce((a, s) => a + s.stats.earnedCopper, 0) / roam.length
+console.log(`\n   ── 走動的代價 ──`)
+console.log(`   死亡率 ${roamDeadRate.toFixed(1)}%（純領工資 ${deathRate.toFixed(1)}%）　死因：${[...roamCauses].sort((a, b) => b[1] - a[1]).map(([c, n]) => `${c} ${n}`).join('　')}`)
+console.log(`   平均收入 ${roamEarned.toFixed(0)} 銅（純領工資 ${avgEarned.toFixed(0)}）　上工日 ${med(roamAlive.map((s) => s.stats.wageDays))}（${medWageWage}）`)
+console.log(`   平均受傷 ${(roam.reduce((a, s) => a + s.stats.injuriesTaken, 0) / roam.length).toFixed(1)} 道（純領工資 ${injTaken.toFixed(1)}）`)
+
 // ── 一局死亡的完整決策鏈（判斷公平性：預警夠不夠、躲不躲得掉）──
 const sample = dead[0]
 if (sample) {
@@ -227,6 +314,17 @@ const checks: Array<[string, boolean, string]> = [
     `小心 ${carefulSanity.toFixed(0)} vs 粗心 ${sloppySanity.toFixed(0)}`],
   ['★ 清潔不再是單向槽（小心組結局 ≥40）', carefulHyg >= 40,
     `小心 ${carefulHyg.toFixed(0)} vs 粗心 ${sloppyHyg.toFixed(0)}`],
+  // ★ 平凡的兩面驗收。它是三條裡唯一【不需要劇情線】的一條，
+  //   所以機器人政策就是它的正確量尺：一個只上工、吃喝、跟人講話的人該達得到。
+  // ★ 平凡的兩道驗收各用【能回答它那個問題】的量尺，這是本段的重點：
+  //   同一個數字餵兩道相反的閘，只會逼人去調條件討好量尺。
+  ['★ 平凡達得到：會在城裡走動的人拿得到（≥40%）', roamQuiet.pct >= 40,
+    `會走動組 ${roamQuiet.pct.toFixed(0)}%`],
+  ['★★ 但平凡不是活下來就自動送：純領工資拿不到（≤60%）', wageQuiet.pct <= 60,
+    `純領工資組 ${wageQuiet.pct.toFixed(0)}%——若接近 100% 則平凡退化成 else 分支，違反支柱一`],
+  ['★ 而兩組必須明顯分離（差 ≥30 個百分點＝這條結局真的在問一件事）',
+    roamQuiet.pct - wageQuiet.pct >= 30,
+    `走動 ${roamQuiet.pct.toFixed(0)}% − 領工資 ${wageQuiet.pct.toFixed(0)}% = ${(roamQuiet.pct - wageQuiet.pct).toFixed(0)} 點`],
 ]
 void maxShare
 console.log('')
