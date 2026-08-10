@@ -69,6 +69,11 @@ export interface Cond {
    * 平凡要的是鄰人——多而不深。這條分工是既有裁決，不是為結局發明的。
    */
   npcCount?: { axis: 'acquaintance' | 'trust' | 'affection'; is: Cmp; atLeast: number }
+  /**
+   * ★ 認得她的人裡，有幾個【所在節點沒有任何工作】。
+   *   實作查工作表而非寫死名字——理由見 cond.ts 該分支的註解。
+   */
+  npcOffWage?: { axis: 'acquaintance' | 'trust' | 'affection'; is: Cmp; atLeast: number }
   /** 有人指名要她手藝的次數 */
   namedAsks?: Cmp
   /** 她去上了工的日數（量可靠性，不量成功） */

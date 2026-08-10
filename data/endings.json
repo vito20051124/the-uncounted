@@ -142,6 +142,13 @@
             "is": ">=30",
             "atLeast": 4
           }
+        },
+        {
+          "npcOffWage": {
+            "axis": "acquaintance",
+            "is": ">=30",
+            "atLeast": 1
+          }
         }
       ]
     },

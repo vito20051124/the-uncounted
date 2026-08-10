@@ -121,6 +121,30 @@ export function evaluate(cond: Cond | undefined, ctx: Ctx): boolean {
     const n = Object.values(s.npcs).filter((x) => cmp(x[cond.npcCount!.axis], cond.npcCount!.is)).length
     if (n < cond.npcCount.atLeast) return false
   }
+  /**
+   * ★★ 「認得她的人裡，有幾個在【不發工錢的地方】」。
+   *
+   * 這一條存在的理由是一個量出來的發現：純領工資的玩家會【自動】認得
+   * 老克瓦、穗爾、闕（各 100%），而完全不會認得灰姐與石啞（各 0%）——
+   * 因為前三人所在的節點有工作，後兩人所在的節點沒有。
+   * 於是任何純計數的條件（「認得 N 個人」）都在量錯的東西：
+   * 它量的是她上了幾天工，而不是她有沒有去過一個不給她錢的地方。
+   *
+   * ★ 而它刻意【查工作表而不是寫死名字】。
+   *   寫「灰姐或石啞」會在兩件事上壞掉：擴充 NPC 名冊時要手動維護，
+   *   以及——更重要的——哪天灰棚巷加了一份工，認得灰姐就【不再證明】
+   *   她去過不給錢的地方，而寫死名字的版本會繼續給分。
+   *   查表的版本會自己失效，那才是對的。
+   */
+  if (cond.npcOffWage !== undefined) {
+    const paid = new Set([...ctx.idx.job.values()].map((j) => j.at))
+    const n = Object.entries(s.npcs).filter(([id, st]) => {
+      if (!cmp(st[cond.npcOffWage!.axis], cond.npcOffWage!.is)) return false
+      const who = ctx.idx.npc.get(id as never)
+      return who !== undefined && !paid.has(who.at)
+    }).length
+    if (n < cond.npcOffWage.atLeast) return false
+  }
   if (cond.namedAsks !== undefined && !cmp(s.stats.namedAsks, cond.namedAsks)) return false
   if (cond.wageDays !== undefined && !cmp(s.stats.wageDays, cond.wageDays)) return false
   if (cond.givenAway !== undefined && !cmp(s.stats.givenAway, cond.givenAway)) return false
