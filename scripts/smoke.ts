@@ -17,7 +17,7 @@ import { needsHazard as needsHazardForTest } from '../src/engine/body.ts'
 import {
   DEPRIVATION_STAGES, newInjury as newInjuryForTest, quoteSuppuration as quoteSuppurationForTest,
 } from '../src/engine/body.ts'
-import { LAST_DAY, NEED_KEYS } from '../src/engine/clock.ts'
+import { NEED_KEYS } from '../src/engine/clock.ts'
 import { CLEAN, UNWIND_GAIN, canUnwind, fatigueMul } from '../src/engine/mind.ts'
 
 const D = new URL('../data/', import.meta.url)
@@ -32,7 +32,15 @@ const results: Array<{ n: number; name: string; ok: boolean; note: string }> = [
 const T = (n: number, name: string, ok: boolean, note = '') => results.push({ n, name, ok, note })
 
 /** 一個簡單的 AI：餓了就吃、有工就做、天黑就睡、否則移動 */
-function autoplay(seed: string, items: string[], maxSteps = 400) {
+/**
+ * ★ maxSteps 由 LAST_DAY 導出，不寫死。
+ *   局長度 14 → 30 之後這裡沒有跟著調，於是測試 ① 在第 20 日撞到 400 步上限而失敗——
+ *   而它【沒有被發現】，因為同一次提交裡 smoke.ts 多了一個重複的 import，
+ *   整個檔案直接 SyntaxError，npm run check 在第 6 步就中斷了。
+ *   兩個缺陷互相遮蔽：崩掉的檔案藏住了它自己裡面的失敗。
+ *   （每日約 25–30 步，取 30 並留兩成餘裕。）
+ */
+function autoplay(seed: string, items: string[], maxSteps = Math.round(LAST_DAY * 30 * 1.2)) {
   let s = initialState(seed, 'bh:alley', items, IDX)
   const logAll: string[] = []
   let steps = 0
@@ -104,7 +112,7 @@ function autoplay(seed: string, items: string[], maxSteps = 400) {
 
 // ① 走完 5–7 日
 const a = autoplay('smoke-a', ['item-bandaid', 'item-lighter', 'item-keys'])
-T(1, '從開場走到第 14 日結束（主線窗口）', a.s.clock.day > LAST_DAY || a.s.dead !== null,
+T(1, `從開場走到第 ${LAST_DAY} 日結束（主線窗口）`, a.s.clock.day > LAST_DAY || a.s.dead !== null,
   `結束於第 ${a.s.clock.day} 日${a.s.dead ? `（${a.s.dead.cause}）` : ''}，${a.steps} 步`)
 
 // ② 里程碑可達性：檢查存夠 22 銅是否可能
@@ -146,7 +154,7 @@ T(2, '里程碑（本地舊衣 22 銅）在窗口內可達', a.s.stats.earnedCop
     else if (s4.injuries.length === 0) healed++
   }
   const pct = (died / trials4) * 100
-  T(4, '★ 一道未處置擦傷的 14 日致死率 ≈5.2%（不是死刑，也不是免死）',
+  T(4, `★ 一道未處置擦傷的 ${LAST_DAY} 日致死率 ≈5.2%（不是死刑，也不是免死）`,
     pct > 2 && pct < 12,
     `實測 ${pct.toFixed(1)}%（理論 5.2%）；${((healed / trials4) * 100).toFixed(0)}% 在窗口內痊癒`)
 }
@@ -507,7 +515,7 @@ T(12, '決定性：同 seed 兩次跑分結果完全相同',
   const gain = out.needs.sanity - x.needs.sanity
   // 看相簿（+6）必須比獨處（+4）強：不可再生的東西應該更有效
   const strongerExists = 6 > gain
-  T(281, '★ 獨處只是其中一條分支（+' + gain + '），不是最強的（看相簿 +6 更強）',
+  T(28, '★ 獨處只是其中一條分支（+' + gain + '），不是最強的（看相簿 +6 更強）',
     gain === UNWIND_GAIN && strongerExists && out.purse.copper === 20 && Object.keys(out.npcs).length === 0,
     '理智 +' + gain + '　錢不變 ' + out.purse.copper + '　NPC ' + Object.keys(out.npcs).length + ' 個')
 }
@@ -529,6 +537,56 @@ T(12, '決定性：同 seed 兩次跑分結果完全相同',
     ok ? kinds.map((k) => `${k}: ${CLEAN[k].copper}銅/${CLEAN[k].minutes}分/+${CLEAN[k].hygiene}/日${CLEAN[k].maxPerDay}次`).join('　') : notes.join('、'))
 }
 
+// ㉚ ★★ 救濟隊真的是一個安全閥嗎——而且它【沒有】讓經濟失效嗎
+//
+// 加這一條的理由：大聖堂區的免費麵包是 P0 階段【刻意砍掉】的東西，
+// 理由寫在規劃裡——「免費麵包會讓經濟壓力歸零」。現在把它加回來，
+// 就必須證明兩件事同時成立，否則它就是一個破口：
+//   ① 一個【一個銅都沒有】的人，靠它撐得下去（否則它不是安全閥，只是佈景）
+//   ② 它【不划算】到一個有工作的人不會去排（否則貧窮陷阱失效，違反支柱二）
+//
+// ★ 而第三件事由引擎保證、在這裡驗收：排隊【不計入 wageDays】。
+//   否則「平凡」的可靠性條件（≥18 日）可以靠領施捨滿足，那把那句
+//   「從不遲到、也從不多要」的意思整個顛倒過來。
+{
+  const alms = [...IDX.job.values()].find((j) => j.id === 'job-cathedral-alms')!
+  // ① 身無分文者：只排救濟、只喝井水，撐 12 日
+  let s30 = initialState('smoke-alms', 'bh:cathedral', [], IDX)
+  s30 = { ...s30, purse: { copper: 0 } }
+  let steps30 = 0
+  while (!s30.dead && s30.clock.day <= 12 && steps30++ < 600) {
+    const h = s30.clock.minute / 60
+    if (h >= alms.when[0] && h < alms.when[1] && attemptsLeft(s30, alms) > 0 && s30.needs.satiety < 60) {
+      s30 = reduce(s30, { t: 'work', job: alms.id }, IDX).s; continue
+    }
+    if (h >= 21 || h < 5) { s30 = reduce(s30, { t: 'sleep', kind: 'rough', costCopper: 0 }, IDX).s; continue }
+    s30 = reduce(s30, { t: 'wait', minutes: 60 }, IDX).s
+  }
+  // ★ 她一定會渴——大聖堂區不賣水（canon 沒寫那裡有水攤）。所以驗收的是
+  //   「飢餓不再是死因」，而不是「她活得好」。安全閥擋的是餓，不是渴。
+  const starved = s30.dead?.cause.includes('飢餓') ?? false
+  T(30, '★ 救濟隊是安全閥：身無分文也不會【餓】死（渴另計，那要下山打水）',
+    !starved, s30.dead ? `死於：${s30.dead.cause}（第 ${s30.dead.day} 日）` : `撐過 12 日，飽食 ${s30.needs.satiety.toFixed(0)}`)
+
+  // ② 排隊不得計入 wageDays
+  let s31 = initialState('smoke-alms-wage', 'bh:cathedral', [], IDX)
+  s31 = { ...s31, clock: { day: 2, minute: 8 * 60 }, needs: { ...s31.needs, satiety: 30 } }
+  const after = reduce(s31, { t: 'work', job: alms.id }, IDX).s
+  T(31, '★★ 排救濟隊不計入 wageDays（否則「平凡」的可靠性可以靠領施捨滿足）',
+    after.stats.wageDays === 0 && after.needs.satiety > s31.needs.satiety,
+    `wageDays ${s31.stats.wageDays} → ${after.stats.wageDays}（須為 0）；飽食 ${s31.needs.satiety.toFixed(0)} → ${after.needs.satiety.toFixed(0)}`)
+
+  // ③ 不划算：省下的 1 銅必須低於同一段時間去上工的期望收入
+  const bread = IDX.item.get('item-rye-bread')!.priceCopper ?? 1
+  const quays = [...IDX.job.values()].find((j) => j.id === 'job-quays-dayhire')!
+  const almsPerMin = bread / alms.minutes
+  const quaysPerMin = (quays.payCopper * quays.hireChance) / quays.minutes
+  T(32, '★ 救濟不划算：有工可做的人不會來排（否則貧窮陷阱失效）',
+    almsPerMin < quaysPerMin,
+    `救濟 ${(almsPerMin * 60).toFixed(2)} 銅/時（省下一份麵包 ${bread} 銅 ÷ ${alms.minutes} 分）`
+    + ` vs 碼頭 ${(quaysPerMin * 60).toFixed(2)} 銅/時（期望值），還沒算爬 18 公尺`)
+}
+
 // ── 輸出 ──
 console.log('=== 無籍者 P0 · 煙霧測試 ===\n')
 let pass = true
@@ -537,5 +595,8 @@ for (const r of results) {
   console.log(`  ${r.ok ? 'PASS' : 'FAIL'}  ${String(r.n).padStart(2)}. ${r.name}`)
   if (r.note) console.log(`         ${r.note}`)
 }
-console.log(pass ? '\n[PASS] 30 項煙霧測試全數通過。' : '\n[FAIL] 有項目未通過。')
+// ★ 總數由 results.length 導出，不寫死。原本寫死「30 項」，
+//   而我剛加了三條測試之後它照樣印「30 項」——一個會說謊的合格訊息，
+//   跟那個把 npm run check 中斷藏起來的重複 import 是同一個類別。
+console.log(pass ? `\n[PASS] ${results.length} 項煙霧測試全數通過。` : '\n[FAIL] 有項目未通過。')
 process.exit(pass ? 0 : 1)

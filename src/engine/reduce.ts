@@ -510,7 +510,9 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
       }
       s = setDayFlag(s, 'worked')
       // ★ wageDays 量的是【日數】不是次數——同一天做兩份工只算一天。
-      if (!s.stats.wageDaySeen[String(s.clock.day)]) {
+      //   而 job.charity（領救濟）【一律不計】——理由見 types.ts JobDef.charity 的註解：
+      //   若排施捨隊算上工，「平凡」的可靠性條件就能靠領救濟滿足，意思整個顛倒。
+      if (!job.charity && !s.stats.wageDaySeen[String(s.clock.day)]) {
         s = {
           ...s,
           stats: {
@@ -520,8 +522,14 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
           },
         }
       }
-      log.push(`你做完了一天的${job.name}，領到 ${job.payCopper} 銅。`)
-      s = { ...s, ledger: ledger(s, before, '工作', `${job.name}：+${job.payCopper} 銅`, ['休息', '去別處找工']) }
+      // ★ 領救濟沒有工錢，印「領到 0 銅」會讀成一個 bug。
+      const gotLine = job.charity
+        ? `你排完了${job.name}的隊。`
+        : `你做完了一天的${job.name}，領到 ${job.payCopper} 銅。`
+      log.push(gotLine)
+      s = { ...s, ledger: ledger(s, before, job.charity ? '領救濟' : '工作',
+        job.charity ? job.name : `${job.name}：+${job.payCopper} 銅`,
+        ['休息', '去別處找工']) }
       for (const h of jobHurt) {
         s = { ...s, stats: { ...s.stats, injuriesTaken: s.stats.injuriesTaken + 1 } }
         s = bodyLog(s, `受傷：${h}（未處置）`, ['花 1 銅買苦鹽苔藥膏處理', '用一片 OK 繃', '不處理'])

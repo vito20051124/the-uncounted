@@ -158,3 +158,58 @@
   requiresTide: ebb
   src: derived:大市集經城南牆至蒸發池之運鹽正道；同受潮汐門管制
   tell: 出了南港門就沒有燈了。堤道兩側是結晶池，池壁只有一塊石板寬，滑下去的人要靠別人拉才上得來。
+- id: e:quays-yards-shipyardroad
+  a: bh:quays
+  b: bh:yards
+  name: 船塢路
+  minutes: 8
+  elevationDelta: 2
+  riskDay: 0.02
+  riskNight: 0.08
+  knowledge: public
+  src: canon:districts.md#鐵根造船區「西鄰碼頭區」、主街船塢路（Shipyard Road）
+- id: e:yards-market-timberhaul
+  a: bh:yards
+  b: bh:market
+  name: 運木坡道
+  minutes: 15
+  elevationDelta: 6
+  riskDay: 0.02
+  riskNight: 0.06
+  knowledge: public
+  src: canon:districts.md#鐵根造船區「北接大市集區」、鐵根木材加工需自水岸往上運
+- id: e:yards-cinder-mudgate
+  a: bh:yards
+  b: bh:cinder
+  name: 泥血門水閘邊
+  minutes: 11
+  elevationDelta: 0
+  riskDay: 0.09
+  riskNight: 0.38
+  knowledge: public
+  tell: 水閘那一段沒有燈。造船區的人天黑就把門閂上，而灰棚巷那一頭本來就沒有門。
+  src: canon:districts.md#鐵根造船區「東臨泥血門水閘」＋#灰棚巷「皆界於泥血門」
+- id: e:market-cathedral-steps
+  a: bh:market
+  b: bh:cathedral
+  name: 大聖堂階梯
+  minutes: 18
+  elevationDelta: 6
+  riskDay: 0.01
+  riskNight: 0.03
+  knowledge: public
+  climbFactor: 2.2
+  tell: 階梯上每隔一段就站一個聖堂侍衛。他們不擋人，白天不擋。
+  src: canon:districts.md#聖鹵大聖堂區「南抵百階梯高台緣」、主街祈禱階梯（Prayer Steps）、治安 1 級教會聖堂侍衛巡邏
+- id: e:grotto-cathedral-cliffpath
+  a: bh:grotto
+  b: bh:cathedral
+  name: 崖上崖下小徑
+  minutes: 14
+  elevationDelta: 4
+  riskDay: 0.02
+  riskNight: 0.07
+  knowledge: learned
+  climbFactor: 2.2
+  tell: 寂裔替聖堂修水閥，所以他們有一條自己的路上去。他們不會主動告訴你它在哪。
+  src: canon:districts.md#寂裔石窟街「隱蔽於領事丘海崖下方」＋#聖鹵大聖堂區「位於領事丘東南側高台」；寂裔負責維修導流井筒與壓力閥

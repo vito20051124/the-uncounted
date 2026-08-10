@@ -152,5 +152,73 @@
     "tell": "教頭數到十五就停，不管你撐到第幾分鐘。",
     "desc": "掄鹽袋、近身、上圓木。三個時辰，一個銅都沒有——\n這一章的代價就是錢：每個訓練日放棄十二到十五銅。",
     "src": "canon:combat-doctrines.md 鹵港鹽袋巷戰流派的訓練內容與傳承機構；derived:0 銅——武館收的是學費不是發薪，代價是當日放棄的日薪 12–15 銅"
+  },
+  {
+    "id": "job-yards-ropewalk",
+    "name": "長棚打繩",
+    "at": "bh:yards",
+    "when": [
+      6,
+      10
+    ],
+    "minutes": 480,
+    "payCopper": 12,
+    "hireChance": 1,
+    "maxPerDay": 1,
+    "requires": {
+      "all": [
+        {
+          "needs": {
+            "stamina": ">25"
+          }
+        },
+        {
+          "npc": {
+            "id": "npc-yards-ropewalker",
+            "axis": "acquaintance",
+            "is": ">=25"
+          }
+        }
+      ]
+    },
+    "costs": {
+      "stamina": -30,
+      "hydration": -12
+    },
+    "risks": [
+      {
+        "chance": 0.06,
+        "tell": "主纜過肩的時候會夾住手指。老克瓦少的那兩根就是這樣少的。",
+        "injury": "繩夾傷"
+      }
+    ],
+    "tell": "長棚是行會的地方。他認得你，你才進得去——不認得你的時候，你連排隊的資格都沒有。",
+    "desc": "三個人同時走三十步，同一個速度。一天十二銅——比碼頭少三銅，但【不會挑不上你】。\n這份工不靠運氣也不靠身體，靠有人肯讓你進門。而你賺得比碼頭少，是因為你在學。",
+    "src": "canon:districts.md#鐵根造船區 繩纜編織、行會「對外人警惕」；derived:12 銅為保證錄取而低於碼頭 15 銅之對價（碼頭期望值 0.6×15＝9），學徒工資低於熟手為既有階制通則",
+    "npcOnComplete": {
+      "id": "npc-yards-ropewalker"
+    }
+  },
+  {
+    "id": "job-cathedral-alms",
+    "name": "孤兒院側門的救濟隊",
+    "at": "bh:cathedral",
+    "when": [
+      7,
+      15
+    ],
+    "minutes": 90,
+    "payCopper": 0,
+    "charity": true,
+    "hireChance": 1,
+    "maxPerDay": 1,
+    "costs": {
+      "satiety": 55,
+      "hydration": 18,
+      "stamina": -6
+    },
+    "tell": "隊伍從側門一路排到聖徒長廊。發到沒有為止，而沒有為止通常是中午之前。",
+    "desc": "白堊麵包和一份濃湯，不收錢，一天一次。要排九十分鐘，還要先爬十八公尺上來。\n★ 它省下的是一銅——而九十分鐘加上爬階，比一銅貴。所以它只在你【一個銅都沒有】的時候才划得來，而那正是它存在的意思。\n★ 排隊不算上工。",
+    "src": "canon:districts.md#聖鹵大聖堂區 孤兒院每日提供免費白堊麵包與濃湯（不收錢）、+15~+18m"
   }
 ]

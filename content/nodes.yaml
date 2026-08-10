@@ -107,3 +107,38 @@
   privateHours:
     - 0
     - 24
+- id: bh:yards
+  name: 鐵根造船區
+  canonRef: district-iron-root-yards
+  elevation: 4
+  security: 3
+  services:
+    - job-rope
+    - craft
+    - repair
+    - food-cheap
+  desc: 半完成的船骨架像一排肋骨立在泥灘上。鐵錘聲不停，空氣裡是焦木漆、松脂和煤煙。一千七百人住在這裡，而他們全部認得彼此——所以他們一眼就看得出你不是。
+  src: canon:world/geography/saltmarch/brinehaven/districts.md#鐵根造船與工坊區 +2~+6m、治安 2–3 級「工會高度自我管理，對外人警惕」、繩纜編織、1,700 人
+  sells:
+    - item-rye-bread
+    - item-well-water
+  buys: []
+  mapX: 55
+- id: bh:cathedral
+  name: 聖鹵大聖堂區
+  canonRef: district-cathedral-rise
+  elevation: 16
+  security: 1
+  services:
+    - alms
+    - buy
+  desc: |-
+    玄武岩高台，兩座尖塔。空氣裡是乳香、沒藥，以及淡緋色的聖水蒸汽——那蒸汽你聞得到，但它對你沒有任何作用，這輩子都不會有。
+    孤兒院的側門每天發白堊麵包和濃湯，不收錢。侍衛不趕排隊的人，但他們會看。
+    這裡是治安一級。天黑以後你不該還在這裡——侍衛會問，而你答不出來。
+  src: canon:world/geography/saltmarch/brinehaven/districts.md#聖鹵大聖堂區 +15~+18m、治安 1 級「教會聖堂侍衛巡邏」、孤兒院每日免費白堊麵包與濃湯、洗禮聖水 150 銅、歸復教會大聖堂；derived:賣井水 1 銅——2,000 名居民＋孤兒院＋「以白堊水調製聖水」的產業必然有穩定水源（★ 補這一格的理由是 OQ-61：石窟街無水源曾是全圖最容易渴死的地方，而它上面一個字的提示都沒有。不可以再造一個）
+  sells:
+    - item-holy-water
+    - item-well-water
+  buys: []
+  mapX: 30

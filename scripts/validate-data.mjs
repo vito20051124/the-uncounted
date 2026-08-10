@@ -200,6 +200,34 @@ for (const j of jobs) {
     scan(e.id, 'text', e.text); scan(e.id, 'asks', e.asks)
     scan(e.id, 'gaveUp', e.gaveUp); scan(e.id, 'tagline', e.tagline)
   }
+  // ★ 節點描述與物品說明同樣是玩家看得到的（here.desc 就印在敘事區、it.desc 印在背包）。
+  //   第一版這道閘只查事件與結局，於是我立刻在新增的城區 desc 裡寫了「★ 治安一級」——
+  //   同一個錯誤，換一個欄位。閘門要涵蓋【全部】呈現給玩家的文字，否則它只是抓上一次的錯。
+  for (const n of nodes) scan(n.id, 'desc', n.desc)
+  for (const it of items) { scan(it.id, 'desc', it.desc); scan(it.id, 'name', it.name) }
+  for (const j of jobs) scan(j.id, 'tell', j.tell)
+  for (const n of npcs) { scan(n.id, 'desc', n.desc)
+    for (const [i, l] of (n.talkLines ?? []).entries()) scan(n.id, `talkLines[${i}]`, l) }
+
+  // ★★ 兩級的分野：敘事文字 vs 機制提示。
+  //
+  //   npc.effect 與 job.desc 是【機制提示】欄位——它們的工作就是告訴玩家
+  //   「這個關係會改變什麼」「這份工要付什麼」。它們用 ★ 當項目符號
+  //   （同局末摘要的「★ 里程碑」），那是強調而不是設計註記，所以不查 ★。
+  //
+  //   但它們仍然不得洩漏正典檔名、遊戲憲法術語，或以「遊戲」自稱——
+  //   那些在任何欄位都是洩漏。
+  const scanHint = (id, field, txt) => {
+    if (typeof txt !== 'string') return
+    for (const [needle, why] of MARK) {
+      if (needle === '★' || !txt.includes(needle)) continue
+      const line = txt.split('\n').find((l) => l.includes(needle)) ?? txt
+      errors.push(`${id} 的 ${field} 含設計註記「${needle}」（${why}）——機制提示欄位可用 ★ 當符號，`
+        + `但不得洩漏這個：「${line.trim().slice(0, 60)}」`)
+    }
+  }
+  for (const n of npcs) scanHint(n.id, 'effect', n.effect)
+  for (const j of jobs) scanHint(j.id, 'desc', j.desc)
 }
 
 // ③ flag 雙向斷鏈：讀了沒人設 = 錯誤；設了沒人讀 = 警告
