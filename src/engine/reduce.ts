@@ -422,6 +422,16 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
         log.push('你在發燒。手抬不起來，站著都在晃——今天上不了工。')
         break
       }
+      // ★★ 時段必須由【reducer 自己】守。
+      //   單元測試抓到：這個檢查原本只存在於 App.tsx，reducer 完全不看 job.when——
+      //   碼頭挑人窗口是 05:00–08:00，而 reducer 會接受凌晨三點上工，只有介面在擋。
+      //   這與本專案已修掉的三個 blocker 是同一個模式（兩條路徑分歧，
+      //   每條單獨看都對，錯在它們之間）。reducer 必須守住自己的前置條件——
+      //   跑分腳本、存讀檔、未來的介面改動都不該有機會繞過它。
+      if (!evaluate({ hours: job.when }, c)) {
+        log.push(`${job.name}現在不招人（${job.when[0]}:00–${job.when[1]}:00）。`)
+        break
+      }
       if (!evaluate(job.requires, c)) {
         log.push('你今天做不了這個。')
         break
