@@ -291,3 +291,13 @@ table.sum td:last-child { text-align: right; font-variant-numeric: tabular-nums;
   background: #14202a; border: 1px solid #2f4152; border-left: 3px solid #5a8ab5;
   border-radius: 3px; padding: 6px 9px; font-size: 12px; color: #a8c4d8; white-space: pre-line; line-height: 1.55;
 }
+
+/* ── 結局畫面 ── */
+.ending-tag { font-family: var(--font-serif); font-size: 15px; color: var(--accent); margin: 4px 0 18px; }
+.ending-gave { font-size: 12.5px; color: #9c8f7e; line-height: 1.75; white-space: pre-line; }
+/* ★ 三扇門【等寬等重、不排序】——版面本身就不能暗示優劣 */
+.ending-doors { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.door { border: 1px solid var(--line); border-radius: 3px; padding: 10px 11px; background: #16120e; }
+.door-name { font-family: var(--font-serif); font-size: 15px; color: var(--accent); }
+.door-tag { font-size: 12px; color: var(--ink-dim); margin: 3px 0 7px; }
+.door-asks { font-size: 11.5px; color: #8d8274; line-height: 1.7; white-space: pre-line; }

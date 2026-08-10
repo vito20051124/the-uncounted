@@ -28,7 +28,7 @@ const load = (f: string) => JSON.parse(readFileSync(new URL(f, D), 'utf-8'))
 const IDX = buildIndex({
   npcs: load('npcs.json'), nodes: load('nodes.json'), edges: load('edges.json'),
   items: load('items.json'), jobs: load('jobs.json'), events: load('events.json'),
-  conditions: load('conditions.json'),
+  conditions: load('conditions.json'), endings: load('endings.json'),
 } as Content)
 
 const N = Number(process.argv[2] ?? 300)

@@ -401,6 +401,20 @@ export interface ConditionText {
   modern: Record<string, string>
 }
 
+/** 結局定義。實作在 ending.ts；型別放這裡以免 types ⇄ ending 循環 import。 */
+export interface EndingDef {
+  id: string
+  aim: string
+  name: string
+  tagline: string
+  asks: string
+  requires: Cond
+  text: string
+  gaveUp: string
+  opensLongform?: boolean
+  src: Src
+}
+
 export interface Content {
   npcs: NpcDef[]
   nodes: WorldNode[]
@@ -409,6 +423,7 @@ export interface Content {
   jobs: JobDef[]
   events: EventDef[]
   conditions: ConditionText
+  endings: EndingDef[]
 }
 
 /** 索引化的內容，供求值器 O(1) 查找 */
@@ -419,6 +434,7 @@ export interface Index {
   job: Map<JobId, JobDef>
   event: Map<EventId, EventDef>
   npc: Map<NpcId, NpcDef>
+  ending: Map<string, EndingDef>
   /** 敘事文本（鐵律 5：engine 不持有文本，只持有它的 key） */
   text: ConditionText
   /** 鄰接表：nodeId -> 該點所有邊 */
@@ -439,6 +455,7 @@ export function buildIndex(c: Content): Index {
     job: new Map(c.jobs.map((j) => [j.id, j])),
     event: new Map(c.events.map((e) => [e.id, e])),
     npc: new Map((c.npcs ?? []).map((n) => [n.id, n])),
+    ending: new Map((c.endings ?? []).map((e) => [e.id, e])),
     text: c.conditions,
     adj: new Map(),
   }

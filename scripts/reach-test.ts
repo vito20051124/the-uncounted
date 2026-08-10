@@ -28,7 +28,7 @@ const rd = (f: string) => JSON.parse(readFileSync(new URL(f, D), 'utf-8'))
 const IDX = buildIndex({
   npcs: rd('npcs.json'), nodes: rd('nodes.json'), edges: rd('edges.json'),
   items: rd('items.json'), jobs: rd('jobs.json'), events: rd('events.json'),
-  conditions: rd('conditions.json'),
+  conditions: rd('conditions.json'), endings: rd('endings.json'),
 } as Content)
 
 /**
@@ -49,10 +49,16 @@ const EXPECT: Record<string, NodeId[] | null> = {
   'ev-give-soup': ['bh:cinder'],
   'ev-give-cloth': ['bh:alley', 'bh:quays'],
   'ev-give-slot': ['bh:quays'],
+  // 第五章
+  'ev-ch5-aim': null,            // 宣告目標——與地點無關，她在哪裡都會想到這件事
+  'ev-lease-sign': ['bh:alley'], // 老鹽街的單間就在她落地的那條巷子上面
 }
 
 const ALL_NODES = [...IDX.node.keys()]
 const HOURS = [6, 8, 11, 14, 18, 21]
+/** ★ 理想狀態的日子要晚到足以涵蓋第五章（day>=24），錢要夠付租約（60 銅） */
+const IDEAL_DAY = 28
+const IDEAL_COPPER = 200
 
 /** 一個「該有的都有了」的狀態，用來測條件而不是測玩家能不能練到那裡 */
 function ideal(at: NodeId, hour: number, dropFlags: string[]): GameState {
@@ -60,13 +66,17 @@ function ideal(at: NodeId, hour: number, dropFlags: string[]): GameState {
   const flags: Record<string, boolean> = {
     'identity-obtained': true, 'path-token': true, 'saw-workshop': true,
     'bond-scribe-1': true, 'ladder-prentice-in': true, 'hollow-bench': true,
+    // 三個目標旗標都給——ev-ch5-aim 的自我守衛（not any[aim-*]）會自動把它們拿掉，
+    // 而 ev-lease-sign 需要 aim-hearth。
+    'aim-hearth': true, 'aim-trade': true, 'aim-quiet': true,
   }
   for (const f of dropFlags) delete flags[f]
   return {
-    ...s, at, clock: { day: 20, minute: hour * 60 }, flags,
+    ...s, at, clock: { day: IDEAL_DAY, minute: hour * 60 }, flags,
+    purse: { copper: IDEAL_COPPER },
     needs: { ...s.needs, stamina: 90 },
     npcs: Object.fromEntries([...IDX.npc.keys()].map((id) => [id,
-      { acquaintance: 60, trust: 60, affection: 60, lastSeenDay: 19, knownFacts: [] }])),
+      { acquaintance: 60, trust: 60, affection: 60, lastSeenDay: IDEAL_DAY - 1, knownFacts: [] }])),
   }
 }
 
@@ -130,7 +140,7 @@ for (const [id, expect] of Object.entries(EXPECT)) {
 
 // 未登記的主線事件（★ 或 ev-ladder-/ev-named-/ev-give- 開頭者）必須在 EXPECT 裡有一行
 const shouldRegister = [...IDX.event.values()]
-  .filter((e) => /^ev-(ladder|named|give|ch4|ch5)-/.test(e.id))
+  .filter((e) => /^ev-(ladder|named|give|ch4|ch5|lease|end)-/.test(e.id))
   .filter((e) => !(e.id in EXPECT))
 for (const e of shouldRegister) problems.push(`${e.id}：主線事件但未登記預期地點（在 EXPECT 加一行）`)
 

@@ -24,7 +24,7 @@ const D = new URL('../data/', import.meta.url)
 const load = (f: string) => JSON.parse(readFileSync(new URL(f, D), 'utf-8'))
 const content: Content = {
   npcs: load('npcs.json'), nodes: load('nodes.json'), edges: load('edges.json'), items: load('items.json'),
-  jobs: load('jobs.json'), events: load('events.json'), conditions: load('conditions.json'),
+  jobs: load('jobs.json'), events: load('events.json'), conditions: load('conditions.json'), endings: load('endings.json'),
 }
 const IDX = buildIndex(content)
 

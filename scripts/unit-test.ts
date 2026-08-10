@@ -30,13 +30,14 @@ import {
   attemptsLeft, canTalk, initialState, quoteHireChance, quoteMinutes, reduce, type Action,
 } from '../src/engine/reduce.ts'
 import { rand } from '../src/engine/rng.ts'
+import { resolveEnding } from '../src/engine/ending.ts'
 
 const D = new URL('../data/', import.meta.url)
 const rd = (f: string) => JSON.parse(readFileSync(new URL(f, D), 'utf-8'))
 const IDX: Index = buildIndex({
   npcs: rd('npcs.json'), nodes: rd('nodes.json'), edges: rd('edges.json'),
   items: rd('items.json'), jobs: rd('jobs.json'), events: rd('events.json'),
-  conditions: rd('conditions.json'),
+  conditions: rd('conditions.json'), endings: rd('endings.json'),
 } as Content)
 
 const results: Array<{ n: number; name: string; ok: boolean; note: string }> = []
@@ -401,6 +402,47 @@ function invariants(s: GameState, prev: GameState, a: Action): string[] {
     lies.length ? lies.join('\n         ') : '飢渴致死日數／三級住宿／熱食／三階洗淨 全部對得上')
 }
 
+// ⑨ ★ 結局判定不得有優先序瀑布（憲法：三條結局沒有優劣、沒有隱藏的真結局）
+//    引擎只判定玩家【自己宣告】的那一條。任何 if/else if/else 都會製造一個優劣序，
+//    而最後那個 else【一定】會被讀成「其他都沒達成」——偏偏那就是「平凡」。
+{
+  const at30 = (over: Partial<GameState>): GameState => ({
+    ...initialState('ending-unit', 'bh:alley', [], IDX),
+    clock: { day: 30, minute: 20 * 60 }, ...over,
+  } as GameState)
+  const blankStats = initialState('blank', 'bh:alley', [], IDX).stats
+  const problems: string[] = []
+
+  // (a) 沒宣告 → 還沒有
+  if (resolveEnding(at30({}), IDX).kind !== 'notYet') problems.push('沒宣告卻給了結局')
+
+  // (b) ★ 宣告 A 但只滿足 B 的條件 → 必須是「還沒有」，不得改給 B
+  const satisfyHearth = { 'lease-signed': true, 'romance-scribe': true }
+  const satisfyTrade = { 'rank-prentice-listed': true }
+  for (const [aim, other] of [['aim-trade', satisfyHearth], ['aim-hearth', satisfyTrade]] as const) {
+    const s = at30({
+      flags: { [aim]: true, ...other },
+      purse: { copper: 60 },
+      stats: { ...blankStats, namedAsks: 3 },
+    })
+    const r = resolveEnding(s, IDX)
+    if (r.kind === 'ending' && !s.flags[r.def.aim]) {
+      problems.push(`宣告 ${aim} 卻給了 ${r.def.name} —— 優先序瀑布復活`)
+    }
+  }
+
+  // (c) 每一條結局的 requires 都必須含它自己的 aim flag，否則會被別的宣告誤中
+  for (const d of IDX.ending.values()) {
+    if (!JSON.stringify(d.requires).includes(d.aim)) {
+      problems.push(`${d.name} 的 requires 沒有含它自己的 aim flag（${d.aim}）`)
+    }
+  }
+
+  T(9, '★ 結局判定只認玩家宣告的那一條（無優先序瀑布、無隱藏真結局）',
+    problems.length === 0,
+    problems.length ? problems.join('；') : `${IDX.ending.size} 條結局各自綁定 aim flag，交叉宣告不會誤中`)
+}
+
 // ── 輸出 ──
 console.log('=== 無籍者 · 單元／性質測試 ===\n')
 let pass = true
@@ -409,5 +451,5 @@ for (const r of results) {
   console.log(`  ${r.ok ? 'PASS' : 'FAIL'}  ${String(r.n).padStart(2)}. ${r.name}`)
   if (r.note) console.log(`         ${r.note}`)
 }
-console.log(pass ? '\n[PASS] 8 項單元測試全數通過。' : '\n[FAIL] 有項目未通過。')
+console.log(pass ? '\n[PASS] 9 項單元測試全數通過。' : '\n[FAIL] 有項目未通過。')
 process.exit(pass ? 0 : 1)

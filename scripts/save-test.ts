@@ -17,7 +17,7 @@ const rd = (f: string) => JSON.parse(readFileSync(new URL(f, D), 'utf-8'))
 const IDX = buildIndex({
   npcs: rd('npcs.json'), nodes: rd('nodes.json'), edges: rd('edges.json'),
   items: rd('items.json'), jobs: rd('jobs.json'), events: rd('events.json'),
-  conditions: rd('conditions.json'),
+  conditions: rd('conditions.json'), endings: rd('endings.json'),
 } as Content)
 
 const results: Array<{ n: number; name: string; ok: boolean; note: string }> = []

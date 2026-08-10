@@ -21,6 +21,7 @@ import {
   attemptKey, attemptsLeft, canTalk, ctxOf, initialState, quoteHireChance, quoteMinutes,
   reduce, type Action,
 } from '../engine/reduce.ts'
+import { resolveEnding } from '../engine/ending.ts'
 import { MapView } from './MapView.tsx'
 import {
   AUTO_SLOT, STORAGE_OK, autosave, describeSlot, erase,
@@ -34,10 +35,12 @@ import itemsJson from '../../data/items.json'
 import jobsJson from '../../data/jobs.json'
 import eventsJson from '../../data/events.json'
 import conditionsJson from '../../data/conditions.json'
+import endingsJson from '../../data/endings.json'
 
 const content = {
   npcs: npcsJson, nodes: nodesJson, edges: edgesJson,
   items: itemsJson, jobs: jobsJson, events: eventsJson, conditions: conditionsJson,
+  endings: endingsJson,
 } as unknown as Content
 const IDX = buildIndex(content)
 
@@ -223,7 +226,13 @@ export function App() {
     )
   }
 
-  if (phase === 'end') return <Summary s={s} onLoad={doLoad} slotList={slots} />
+  if (phase === 'end') {
+    // ★ 引擎只判定玩家【自己宣告】的那一條，不做優先序瀑布——
+    //   任何 else 分支都會被讀成「其他都沒達成」，而那偏偏就是「平凡」。
+    //   詳見 src/engine/ending.ts 的檔頭。
+    const res = resolveEnding(s, IDX)
+    return <EndScreen s={s} res={res} onLoad={doLoad} slotList={slots} />
+  }
 
   // ★ 死亡那一幀。支柱三禁止「無預警致命」——致死那一夜的敘述必須被讀到，
   //   而不是直接跳到回溯畫面。舊版就是直接跳。
@@ -849,6 +858,99 @@ export function App() {
         <MapView s={s} idx={IDX} tide={tide} highlight={hoverRoute ?? undefined} routeMode={travelTo} />
       </div>
     </div>
+  )
+}
+
+/**
+ * 局末畫面。死亡走 Summary（紅色語域），活到最後走這裡。
+ * ★「還沒有」不借用任何一條結局的名字，不套死亡的語域，
+ *   而且【不印任何「你離某個結局還差多少」的讀數】——
+ *   用讀數告訴玩家他離最低的那個結局還差幾步，會把「沒有優劣」反過來釘在畫面上。
+ */
+function EndScreen({ s, res, onLoad, slotList }: {
+  s: GameState
+  res: ReturnType<typeof resolveEnding>
+  onLoad?: (slot: SlotId) => void
+  slotList: ReturnType<typeof listSlots>
+}) {
+  if (s.dead) return <Summary s={s} onLoad={onLoad} slotList={slotList} />
+
+  if (res.kind === 'ending') {
+    const d = res.def
+    return (
+      <div class="center-stage" style="align-items:flex-start">
+        <div class="summary">
+          <div class="sec-label hot">{d.name}</div>
+          <div class="ending-tag">{d.tagline}</div>
+          {d.text.split('\n\n').map((p) => <p class="narr">{p}</p>)}
+          <div class="sec-label" style="margin-top:22px">你放棄的</div>
+          <div class="ending-gave">{d.gaveUp}</div>
+          <div class="sec-label" style="margin-top:22px">這一輪</div>
+          <Stats s={s} />
+          <div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="choice" style="width:200px" onClick={() => location.reload()}>再走一輪</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── 還沒有 ──
+  return (
+    <div class="center-stage" style="align-items:flex-start">
+      <div class="summary">
+        <div class="sec-label">還沒有</div>
+        <p class="narr">
+          {res.declared
+            ? '這一輪過完了。你說過你要什麼，但它還沒有成。'
+            : '這一輪過完了。你沒有說過你要什麼——所以也沒有什麼是成了或沒成。'}
+        </p>
+        <p class="narr">
+          月亮又缺了一次。碼頭明天還是五點開工。
+        </p>
+        <div class="sec-label" style="margin-top:20px">三扇門各自要什麼</div>
+        <div class="ending-doors">
+          {res.all.map((d) => (
+            <div class="door">
+              <div class="door-name">{d.name}</div>
+              <div class="door-tag">{d.tagline}</div>
+              <div class="door-asks">{d.asks}</div>
+            </div>
+          ))}
+        </div>
+        <div class="sec-label" style="margin-top:22px">這一輪</div>
+        <Stats s={s} />
+        <div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="choice" style="width:200px" onClick={() => location.reload()}>再走一輪</button>
+          {onLoad && slotList.filter((x) => x.summary && !x.summary.dead).map((x) => (
+            <button class="choice" style="width:240px" onClick={() => onLoad(x.slot)}>
+              讀取{slotLabel(x.slot)}
+              <span class="choice-meta">{x.summary && `第 ${x.summary.day} 日　${x.summary.at}`}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** 局末統計。結局畫面與死亡回溯共用——★ 數字只有一個算法。 */
+function Stats({ s }: { s: GameState }) {
+  const wore = s.flags['wears-local'] === true
+  return (
+    <table class="sum">
+      <tr><td>總收入</td><td>{s.stats.earnedCopper} 銅</td></tr>
+      <tr><td>總支出</td><td>{s.stats.spentCopper} 銅</td></tr>
+      <tr><td>剩餘</td><td>{s.purse.copper} 銅</td></tr>
+      <tr><td>上了工的日子</td><td>{s.stats.wageDays} 天</td></tr>
+      <tr><td>有人指名要你</td><td>{s.stats.namedAsks} 次</td></tr>
+      <tr><td>把東西給出去</td><td>{s.stats.givenAway} 次</td></tr>
+      <tr><td>最久空腹</td><td>{Math.round(s.stats.maxStarveMinutes / 60)} 小時</td></tr>
+      <tr><td>受過的傷</td><td>{s.stats.injuriesTaken} 道（化膿 {s.stats.injuriesInfected}／痊癒 {s.stats.injuriesHealed}）</td></tr>
+      <tr><td>認識的人</td><td>{Object.keys(s.npcs).length}</td></tr>
+      <tr><td>不重複事件</td><td>{s.stats.eventsSeen.length}</td></tr>
+      <tr><td>★ 里程碑：換上本地舊衣</td><td>{wore ? '達成' : '未達成'}</td></tr>
+    </table>
   )
 }
 
