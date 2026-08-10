@@ -23,9 +23,9 @@
 import { readFileSync } from 'node:fs'
 import { buildIndex, type Content, type GameState, type Index } from '../src/engine/types.ts'
 import { NEED_KEYS } from '../src/engine/clock.ts'
-import { quoteSuppuration, needsHazard } from '../src/engine/body.ts'
+import { DEPRIVATION_STAGES, quoteSuppuration, needsHazard } from '../src/engine/body.ts'
 import { staminaFor } from '../src/engine/map.ts'
-import { fatigueMul } from '../src/engine/mind.ts'
+import { CLEAN, HOT_MEAL_WARMTH, SHELTER, fatigueMul } from '../src/engine/mind.ts'
 import {
   attemptsLeft, canTalk, initialState, quoteHireChance, quoteMinutes, reduce, type Action,
 } from '../src/engine/reduce.ts'
@@ -364,6 +364,43 @@ function invariants(s: GameState, prev: GameState, a: Action): string[] {
     lethal.length ? '★ 這些也會致死：' + lethal.join('、') : '四項非致命需求全部確認不致死')
 }
 
+// ⑧ ★ 文案裡的數字必須等於引擎常數（「文件也要被測試」）
+//    conditions.json 對玩家承諾「通鋪 3 銅 +20／單間 12 銅 +40」這類具體數字。
+//    它們是寫死的字串——改了引擎常數，它們就會開始說謊，而那正是本專案
+//    修過三次的缺陷類別（UI 硬寫 34%／hireChance 印基礎值／傷病說明用舊模型）。
+{
+  const cond = rd('conditions.json') as {
+    needs: Record<string, { does: string; exits: string }>
+  }
+  const lies: string[] = []
+  const has = (s: string, n: number) => new RegExp(`(?<![0-9])${n}(?![0-9])`).test(s)
+
+  // 飢渴的致死日數
+  const starveDays = DEPRIVATION_STAGES.starve[2] / 1440
+  const thirstDays = DEPRIVATION_STAGES.thirst[2] / 1440
+  if (!has(cond.needs.satiety!.does, starveDays)) lies.push(`飽食文案沒說「${starveDays} 日」（引擎：${starveDays}）`)
+  if (!cond.needs.hydration!.does.includes(String(thirstDays))) lies.push(`水分文案沒說「${thirstDays} 日」（引擎：${thirstDays}）`)
+
+  // 睡眠的體力與體溫
+  for (const [k, label] of [['rough', '露宿'], ['bunk', '通鋪'], ['room', '單間']] as const) {
+    const sh = SHELTER[k]
+    if (!has(cond.needs.stamina!.exits, sh.stamina)) lies.push(`精力文案的「${label}」不是 ${sh.stamina}`)
+    if (sh.warmth > 0 && !has(cond.needs.warmth!.exits, sh.warmth)) lies.push(`體溫文案的「${label}」不是 ${sh.warmth}`)
+    if (sh.copper > 0 && !has(cond.needs.warmth!.exits, sh.copper)) lies.push(`體溫文案的「${label}」價錢不是 ${sh.copper} 銅`)
+  }
+  if (!has(cond.needs.warmth!.exits, HOT_MEAL_WARMTH)) lies.push(`體溫文案的熱食不是 +${HOT_MEAL_WARMTH}`)
+
+  // 洗淨的價錢
+  for (const [k, label] of [['rinse', '海水沖洗'], ['well', '井邊擦洗'], ['basin', '洗滌場借盆']] as const) {
+    const d = CLEAN[k]
+    if (d.copper === 0) { if (!cond.needs.hygiene!.exits.includes('免費')) lies.push(`清潔文案沒說「${label}」免費`) }
+    else if (!has(cond.needs.hygiene!.exits, d.copper)) lies.push(`清潔文案的「${label}」不是 ${d.copper} 銅`)
+  }
+
+  T(8, '★ conditions.json 的數字等於引擎常數（文件也要被測試）', lies.length === 0,
+    lies.length ? lies.join('\n         ') : '飢渴致死日數／三級住宿／熱食／三階洗淨 全部對得上')
+}
+
 // ── 輸出 ──
 console.log('=== 無籍者 · 單元／性質測試 ===\n')
 let pass = true
@@ -372,5 +409,5 @@ for (const r of results) {
   console.log(`  ${r.ok ? 'PASS' : 'FAIL'}  ${String(r.n).padStart(2)}. ${r.name}`)
   if (r.note) console.log(`         ${r.note}`)
 }
-console.log(pass ? '\n[PASS] 7 項單元測試全數通過。' : '\n[FAIL] 有項目未通過。')
+console.log(pass ? '\n[PASS] 8 項單元測試全數通過。' : '\n[FAIL] 有項目未通過。')
 process.exit(pass ? 0 : 1)

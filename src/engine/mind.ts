@@ -81,6 +81,20 @@ import type { GameState } from './types.ts'
  *   它一律走**這同一個管道與同一組數字**——不得另立計量、不得更有效率。
  *   這樣「性是點綴不是骨架」就不是靠自律維持的，而是架構上如此。
  */
+/**
+ * 睡眠的三級遮蔽效果。抽成常數是為了讓 data/conditions.json 的文案可以被【測試】——
+ * 那些「通鋪 3 銅 +20／單間 12 銅 +40」是寫死在文案裡的數字，
+ * 我改了常數它們就會開始說謊，而那正是本專案修過三次的缺陷類別。
+ * 單元測試 ⑧ 現在會比對文案與這裡的值。
+ */
+export const SHELTER = {
+  rough: { copper: 0, stamina: 40, warmth: -25, sanity: -4 },
+  bunk: { copper: 3, stamina: 65, warmth: 20, sanity: 2 },
+  room: { copper: 12, stamina: 80, warmth: 40, sanity: 4 },
+} as const
+/** 熱食（醃魚大麥飯）的保暖。derived: 三級遮蔽下界之下。 */
+export const HOT_MEAL_WARMTH = 15
+
 export const UNWIND_GAIN = 4
 /** 0 銅是關鍵——付費才能宣洩就是漏斗。 */
 export const UNWIND_MINUTES = 20
@@ -169,7 +183,7 @@ export function settleDay(
   }
 
   // ── 負向（不遞減）──
-  if (s.mind.lastShelter === 'rough') add('roughNight', -4, ['花 3 銅睡通鋪', '花 12 銅睡單間'])
+  if (s.mind.lastShelter === 'rough') add('roughNight', SHELTER.rough.sanity, ['花 3 銅睡通鋪', '花 12 銅睡單間'])
   if (s.needs.hygiene < 30) add('filthy', -3, ['在洗滌場借盆洗一次（1 銅）', '去碼頭用海水沖洗（免費）'])
   if (stageOf('thirst', s.deprivation.thirstMinutes) >= 1) add('thirsty', -3, ['花 1 銅打一皮袋井水'])
   if (stageOf('starve', s.deprivation.starveMinutes) >= 1) add('hungry', -3, ['花 1 銅買兩磅黑麥麵包'])
@@ -182,8 +196,8 @@ export function settleDay(
   if (s.clock.day - lastAny >= 3) add('isolated', -3, ['找個人說話（免費，只要 30 分鐘）'])
 
   // ── 正向（遞減）──
-  if (s.mind.lastShelter === 'room') add('roomNight', gain(v, 4))
-  else if (s.mind.lastShelter === 'bunk') add('bunkNight', gain(v, 2))
+  if (s.mind.lastShelter === 'room') add('roomNight', gain(v, SHELTER.room.sanity))
+  else if (s.mind.lastShelter === 'bunk') add('bunkNight', gain(v, SHELTER.bunk.sanity))
   if (opts.talkedToday) add('talked', gain(v, 3))
   if (opts.workedToday) add('worked', gain(v, 1))
   if (opts.ateHotToday) add('hotMeal', gain(v, 1))

@@ -10,7 +10,7 @@
 import { advanceTime, tideAt, tideTurnedDuring, NEED_KEYS } from './clock.ts'
 import {
   CLEAN, canUnwind, cleanBlocked, fatigueMul, settleDay,
-  UNWIND_GAIN, UNWIND_MINUTES, UNWIND_STAMINA, type CleanKind,
+  HOT_MEAL_WARMTH, SHELTER, UNWIND_GAIN, UNWIND_MINUTES, UNWIND_STAMINA, type CleanKind,
 } from './mind.ts'
 import { evaluate, type Ctx } from './cond.ts'
 import {
@@ -559,7 +559,7 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
       if (a.item === 'item-rye-bread') needs.satiety = clamp(needs.satiety + 70)
       if (a.item === 'item-fish-barley') {
         needs.satiety = clamp(needs.satiety + 55)
-        needs.warmth = clamp(needs.warmth + 15)
+        needs.warmth = clamp(needs.warmth + HOT_MEAL_WARMTH)
         s = setDayFlag(s, 'hotMeal')
       }
       if (a.item === 'item-candy') needs.satiety = clamp(needs.satiety + 25)
@@ -599,14 +599,14 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
       //   於是不帶打火機的人 warmth 只減不增，是一條純單向槽——
       //   而 UI 同時在紅框裡宣稱「再不處理會死」。付錢買分級遮蔽是正典行為
       //   （canon: pilgrimage-of-the-wound.md 防風棚 1 銅／乾淨床 3 銅）。
-      const warmthDelta = a.kind === 'rough' ? -25 : a.kind === 'bunk' ? 20 : 40
+      const shelter = SHELTER[a.kind]
       s = {
         ...s,
         purse: { copper: s.purse.copper - a.costCopper },
         needs: {
           ...s.needs,
-          stamina: clamp(s.needs.stamina + (a.kind === 'room' ? 80 : a.kind === 'bunk' ? 65 : 40)),
-          warmth: clamp(s.needs.warmth + warmthDelta),
+          stamina: clamp(s.needs.stamina + shelter.stamina),
+          warmth: clamp(s.needs.warmth + shelter.warmth),
         },
         stats: { ...s.stats, spentCopper: s.stats.spentCopper + a.costCopper },
       }
