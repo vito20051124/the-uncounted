@@ -1,0 +1,128 @@
+[
+  {
+    "id": "job-quays-dayhire",
+    "name": "碼頭日工",
+    "at": "bh:quays",
+    "when": [
+      5,
+      8
+    ],
+    "minutes": 480,
+    "payCopper": 15,
+    "hireChance": 0.6,
+    "maxPerDay": 1,
+    "hireModBy": "hygiene",
+    "hireChanceAtZero": 0.35,
+    "requires": {
+      "all": [
+        {
+          "needs": {
+            "stamina": ">30"
+          }
+        },
+        {
+          "not": {
+            "injury": {
+              "minSeverity": 2
+            }
+          }
+        }
+      ]
+    },
+    "costs": {
+      "stamina": -35,
+      "hygiene": -20,
+      "hydration": -15
+    },
+    "risks": [
+      {
+        "chance": 0.08,
+        "tell": "第三趟之後腰就開始發燙。",
+        "injury": "腰傷"
+      }
+    ],
+    "tell": "監工站在人群前，先挑手上有繭的。",
+    "desc": "扛鹽袋、堆倉、裝卸。一天十五銅——如果挑得上你的話。",
+    "src": "canon:brinehaven/districts.md#鹽埠碼頭 碼頭工人日薪 15 銅",
+    "npcOnComplete": {
+      "id": "npc-quays-foreman",
+      "acquaintance": 4,
+      "trust": 3
+    }
+  },
+  {
+    "id": "job-pans-rake",
+    "name": "蒸發池扒鹽",
+    "at": "bh:pans",
+    "when": [
+      6,
+      14
+    ],
+    "minutes": 420,
+    "payCopper": 12,
+    "hireChance": 1,
+    "maxPerDay": 1,
+    "requires": {
+      "needs": {
+        "stamina": ">20"
+      }
+    },
+    "costs": {
+      "stamina": -40,
+      "hygiene": -25,
+      "hydration": -25
+    },
+    "risks": [
+      {
+        "chance": 0.14,
+        "tell": "滷水泡了一整天，手背的皮開始裂。",
+        "injury": "鹽蝕手"
+      },
+      {
+        "chance": 0.06,
+        "tell": "長木耙翻池時滑了一下，腰扭到了。",
+        "injury": "腰傷"
+      }
+    ],
+    "tell": "沒有人挑人——願意下池的都能領工牌。這就是為什麼它比碼頭少三銅。",
+    "desc": "用長木耙翻動結晶池、耙集粗鹽。保證錄取，但滷水會吃掉你的手。",
+    "src": "canon:brinehaven/districts.md#聖鹵蒸發池 採晶工日薪 12 銅"
+  },
+  {
+    "id": "job-market-errand",
+    "name": "跑腿送信",
+    "at": "bh:market",
+    "when": [
+      7,
+      17
+    ],
+    "minutes": 150,
+    "payCopper": 6,
+    "hireChance": 0.85,
+    "maxPerDay": 2,
+    "requires": {
+      "all": [
+        {
+          "knowsRoutes": ">=1"
+        },
+        {
+          "needs": {
+            "stamina": ">15"
+          }
+        }
+      ]
+    },
+    "costs": {
+      "stamina": -18,
+      "hydration": -10
+    },
+    "tell": "派工的書記把你上下打量了一遍：「你認得路嗎？認不得路的我不用。」單子只剩兩張。",
+    "desc": "替商號送口信與小件。時間短、可以插空做——但你得知道那些從小在這長大的孩子才知道的近路。書記手上的單子一天就那麼幾張。",
+    "src": "derived:集市書記 12 銅/日；跑腿為書記之下的計件工，150 分約當四分之一個工作日，取 6 銅（計件優於時薪但單數有限）",
+    "npcOnComplete": {
+      "id": "npc-market-scribe",
+      "acquaintance": 4,
+      "trust": 2
+    }
+  }
+]

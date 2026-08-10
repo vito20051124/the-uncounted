@@ -1,0 +1,27 @@
+{
+  "name": "the-uncounted",
+  "private": true,
+  "version": "0.0.0-p0",
+  "type": "module",
+  "description": "The Uncounted / 無籍者 — a survival sandbox set in Serein. P0 loop-validation prototype.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "validate": "node scripts/validate-data.mjs",
+    "smoke": "node scripts/smoke.ts",
+    "pareto": "node scripts/pareto-check.ts",
+    "check": "node scripts/validate-data.mjs && tsc --noEmit && node scripts/pareto-check.ts && node scripts/smoke.ts && node scripts/balance.ts 200",
+    "balance": "node scripts/balance.ts 300"
+  },
+  "dependencies": {
+    "preact": "^10.24.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}

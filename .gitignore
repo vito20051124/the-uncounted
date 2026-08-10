@@ -1,0 +1,17 @@
+node_modules/
+dist/
+_build/
+
+# 存檔（P1 才實作，但先擋住免得日後誤上傳）
+saves/
+*.save.json
+
+# 編輯器與系統
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# 流水線工作區的暫存輸出（briefs/reviews 是設計記錄，會追蹤；日誌不追蹤）
+_generation/outbox/*.log
+_generation/outbox/*.err
