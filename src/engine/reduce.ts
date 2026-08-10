@@ -327,13 +327,56 @@ function applyTreatment(
   let purse = s.purse.copper
   let detail = ''
   if (using === 'herbs') {
-    const held = s.carry.find((c) => c.item === 'item-salve' && c.count > 0)
-    if (held) { carry = removeItem(s, 'item-salve'); detail = '用掉一劑苦鹽苔藥膏' }
+    /**
+     * ★★ 「現買一劑」必須看【這裡有沒有在賣】。
+     *
+     * 舊版不管她站在哪裡都用 1 銅買到苦鹽苔藥膏——而那味藥只在行會大市集販售。
+     * 它造成兩個後果，而第二個是靜默的：
+     *   ① 地理失效：在蒸發池、在碼頭、在她自己的巷子裡都能憑空買到藥。
+     *   ② ★ 私煉灰膏（8 銅，只在灰棚巷賣）因此【完全沒有存在意義】——
+     *      既然到處都能用 1 銅買到正牌的，誰要用八倍價買一盒「沒有人保證裡面是什麼」的。
+     *      於是那個 canon 條目變成一個買得到但永遠不會有人買的死物品。
+     *
+     * 正解就是把價差還原成它本來的意思：**灰棚巷買不到便宜的藥。**
+     * 官方配給價八銅、灰棚巷也八銅（canon districts.md#灰棚巷），
+     * 而市集的苦鹽苔藥膏一銅。八倍價不是懲罰，是「你在哪裡受傷」的代價。
+     *
+     * ★ 灰膏的藥效與苦鹽苔【相同】（同樣走 P_SUPPURATE_HERBS）。
+     *   不另立一個機率——正典只說它的來歷沒人保證，沒說它比較沒用，
+     *   而憑空發明一個機率就是超模的反面版本。差別完整地表達在價格上。
+     */
+    const HERBS: Array<{ item: ItemId; label: string }> = [
+      { item: 'item-salve', label: '苦鹽苔藥膏' },
+      { item: 'item-ash-salve', label: '私煉灰膏' },
+    ]
+    const held = HERBS.find((h) => s.carry.some((c) => c.item === h.item && c.count > 0))
+    /**
+     * ★ 紀律：消耗點一律寫成【字面量】。
+     *
+     * 這兩行本來可以寫成一行 `removeItem(s, held.item)`，而那樣更短。
+     * 不那樣寫的理由是 validate-data ⑤ 只看得見字面的 removeItem(s, 'item-xxx')——
+     * 用變數的話，「私煉灰膏沒有任何消耗路徑」會被誤報成錯誤。
+     *
+     * 而修法【不是】把驗證器改成猜測式的啟發法（掃描附近的字串之類）：
+     * 那種寫法會在某天讓一個真的沒被消耗的物品蒙混過關，也就是製造偽綠燈——
+     * 而偽綠燈正是這三道驗證器存在的唯一理由。
+     * 所以改的是程式：讓消耗這件事【靜態可見】，代價是兩行。
+     */
+    if (held?.item === 'item-salve') { carry = removeItem(s, 'item-salve'); detail = '用掉一劑苦鹽苔藥膏' }
+    else if (held?.item === 'item-ash-salve') { carry = removeItem(s, 'item-ash-salve'); detail = '用掉一劑私煉灰膏' }
     else {
-      const price = idx.item.get('item-salve')?.priceCopper ?? 1
-      if (purse < price) return { s, ok: false, detail: '', text: '你買不起藥膏。' }
-      purse -= price
-      detail = `現買一劑藥膏 −${price} 銅`
+      const here = idx.node.get(s.at)
+      const onSale = HERBS
+        .map((h) => ({ ...h, price: idx.item.get(h.item)?.priceCopper ?? null }))
+        .filter((h) => h.price !== null && (here?.sells ?? []).includes(h.item))
+        .sort((a, b) => a.price! - b.price!)
+      if (onSale.length === 0) {
+        return { s, ok: false, detail: '', text: '這裡沒有人賣藥膏。' }
+      }
+      const buy = onSale[0]!
+      if (purse < buy.price!) return { s, ok: false, detail: '', text: `你買不起${buy.label}。` }
+      purse -= buy.price!
+      detail = `現買一劑${buy.label} −${buy.price} 銅`
     }
   } else {
     if (!s.carry.some((c) => c.item === 'item-bandaid' && c.count > 0)) {

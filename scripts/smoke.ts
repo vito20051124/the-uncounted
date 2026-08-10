@@ -5,7 +5,7 @@
  */
 
 import { readFileSync } from 'node:fs'
-import { buildIndex, type Content, type GameState } from '../src/engine/types.ts'
+import { buildIndex, type Content, type GameState, type ItemId } from '../src/engine/types.ts'
 import { LAST_DAY, tideAt } from '../src/engine/clock.ts'
 import { affordable, offerRoutes } from '../src/engine/map.ts'
 import { availableChoices, drawEvent } from '../src/engine/events.ts'
@@ -353,6 +353,13 @@ T(12, '決定性：同 seed 兩次跑分結果完全相同',
       let x = initialState(`inf-${i}`, 'bh:alley', [], IDX)
       x = {
         ...x, purse: { copper: 99 },
+        // ★ 隨身帶一劑藥膏，而不是靠「現買」。
+        //   舊版靠 treat/herbs 會【在任何地點】用 1 銅買到藥膏，
+        //   而那是一個地理缺陷（苦鹽苔藥膏只在行會大市集販售）。
+        //   修掉那個缺陷之後這條測試就掛了——它一直在依賴那個 bug。
+        //   而它要驗的是【療效】，不是購買路徑，所以正確寫法是把藥先放進背包，
+        //   讓被測的變因只剩「處置 vs 不處置」。
+        carry: [{ item: 'item-salve' as ItemId, count: 1 }],
         injuries: [{ ...newInjuryForTest('wi', '深割傷', 1, 1), infected: true, feverSinceDay: 1, stageDay: 1 }],
       }
       if (treat) x = reduce(x, { t: 'treat', injury: 'wi', using: 'herbs' }, IDX).s
