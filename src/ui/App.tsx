@@ -937,6 +937,44 @@ function EndScreen({ s, res, onLoad, slotList }: {
 /** 局末統計。結局畫面與死亡回溯共用——★ 數字只有一個算法。 */
 function Stats({ s }: { s: GameState }) {
   const wore = s.flags['wears-local'] === true
+  /**
+   * ★ 那片滓的下場。
+   *
+   * 它在這裡而不在別處，是因為建置期的「flag 設了但沒人讀」警告抓到一件對的事：
+   * ev-dross-settle 收掉了 dross-kept 這條死路，卻換來 dross-carried／dross-buried
+   * 兩個沒人讀的新 flag——一個不留下任何痕跡的決定，跟沒有這個決定是一樣的。
+   *
+   * ★★ 而它只是【一行事實】，不帶任何評價，也不進任何結局的達成條件：
+   *   四種下場沒有優劣，同一條原則貫穿到底（見 engine/ending.ts 檔頭）。
+   */
+  const dross = s.flags['dross-buried'] ? '埋回她出現的那面牆根'
+    : s.flags['dross-sold'] ? '賣給灰棚巷收滓的（120 銅）'
+    : s.flags['dross-carried'] ? '留著。它是唯一的證據'
+    : s.flags['dross-kept'] ? '還在她袖口，她沒有再想過它'
+    : null
+  /**
+   * ★ 「怎麼來的」——同一個東西有幾種拿法，而摘要記【哪一種】。
+   *
+   * 這一節同樣是建置期警告逼出來的：path-forge／path-vouch／prentice-by-gang／
+   * prentice-by-guild／guild-roll／hollow-roll 六個 flag 都【設了沒人讀】，
+   * 而它們全都是「她是怎麼拿到的」的記錄。一個玩家付了錢買一個死人的名字，
+   * 與一個玩家被石窟街擔保，在遊戲裡拿到的是同一張身分——
+   * 但那不是同一件事，而在此之前遊戲【一個字都沒有記下來】。
+   *
+   * ★★ 一律只陳述，不加形容詞，不排序。同一條原則：沒有優劣。
+   */
+  const how: Array<[string, string]> = []
+  const id = s.flags['path-token'] ? '自己弄到一塊通行牌'
+    : s.flags['path-forge'] ? '付錢接下灰姐給的那個名字'
+    : s.flags['path-vouch'] ? '石窟街替她擔保'
+    : null
+  if (id) how.push(['被算進去的方式', id])
+  if (s.flags['prentice-by-gang']) how.push(['武館的學徒名額', '幫派供養那一條'])
+  if (s.flags['prentice-by-guild']) how.push(['武館的學徒名額', '工會旬僱名冊那一條'])
+  if (s.flags['guild-roll']) how.push(['承認', '工會名冊上有她一行'])
+  if (s.flags['hollow-roll']) how.push(['承認', '石窟街那塊青石片，她刻完了'])
+  if (s.flags['grotto-known']) how.push(['石窟街的老匠人', '看過她那把鑰匙'])
+  if (s.flags['first-wage']) how.push(['第一筆工錢', '她收好了，沒有當天花掉'])
   return (
     <table class="sum">
       <tr><td>總收入</td><td>{s.stats.earnedCopper} 銅</td></tr>
@@ -950,6 +988,8 @@ function Stats({ s }: { s: GameState }) {
       <tr><td>認識的人</td><td>{Object.keys(s.npcs).length}</td></tr>
       <tr><td>不重複事件</td><td>{s.stats.eventsSeen.length}</td></tr>
       <tr><td>★ 里程碑：換上本地舊衣</td><td>{wore ? '達成' : '未達成'}</td></tr>
+      {dross && <tr><td>那片滓</td><td>{dross}</td></tr>}
+      {how.map(([k, v]) => <tr key={k + v}><td>{k}</td><td>{v}</td></tr>)}
     </table>
   )
 }

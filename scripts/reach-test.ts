@@ -52,6 +52,11 @@ const EXPECT: Record<string, NodeId[] | null> = {
   // 第五章
   'ev-ch5-aim': null,            // 宣告目標——與地點無關，她在哪裡都會想到這件事
   'ev-lease-sign': ['bh:alley'], // 老鹽街的單間就在她落地的那條巷子上面
+  // ★ 不在上面那條 regex 的強制名單內，但它是一條【收口事件】：
+  //   在它之前，玩家可以把那片滓一路帶到第三十日而什麼都不會再發生。
+  //   收口事件最容易寫死（條件一緊就永遠不觸發，而玩家不會知道自己漏了什麼），
+  //   所以照樣登記一行讓它被機械驗收。
+  'ev-dross-settle': ['bh:alley'], // 她落地的那面牆——「埋回原來的地方」只有在這裡成立
 }
 
 const ALL_NODES = [...IDX.node.keys()]
@@ -62,17 +67,22 @@ const IDEAL_COPPER = 200
 
 /** 一個「該有的都有了」的狀態，用來測條件而不是測玩家能不能練到那裡 */
 function ideal(at: NodeId, hour: number, dropFlags: string[]): GameState {
+  // ★ 那片滓要帶著：ev-dross-settle 要 has(item-dross-shard)。
+  //   拒賣一路帶到第 28 日在遊戲中完全達得到（ev-dross-buyer 的「說不賣」分支），
+  //   所以理想狀態本來就該有它——第一版漏了它，於是收口事件被判「不可達」。
   const s = initialState('reach', at, ['item-bandaid', 'item-salve', 'item-fish-barley'], IDX)
+  const carry = [...s.carry, { item: 'item-dross-shard' as const, n: 1 }]
   const flags: Record<string, boolean> = {
     'identity-obtained': true, 'path-token': true, 'saw-workshop': true,
     'bond-scribe-1': true, 'ladder-prentice-in': true, 'hollow-bench': true,
+    'dross-identified': true, 'saw-dross': true,
     // 三個目標旗標都給——ev-ch5-aim 的自我守衛（not any[aim-*]）會自動把它們拿掉，
     // 而 ev-lease-sign 需要 aim-hearth。
     'aim-hearth': true, 'aim-trade': true, 'aim-quiet': true,
   }
   for (const f of dropFlags) delete flags[f]
   return {
-    ...s, at, clock: { day: IDEAL_DAY, minute: hour * 60 }, flags,
+    ...s, at, carry, clock: { day: IDEAL_DAY, minute: hour * 60 }, flags,
     purse: { copper: IDEAL_COPPER },
     needs: { ...s.needs, stamina: 90 },
     npcs: Object.fromEntries([...IDX.npc.keys()].map((id) => [id,

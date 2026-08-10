@@ -24,6 +24,7 @@ const jobs = read('jobs.json')
 const conditions = read('conditions.json')
 const events = read('events.json')
 const npcs = read('npcs.json')
+const endings = read('endings.json')
 
 const errors = []
 const warns = []
@@ -174,6 +175,20 @@ for (const j of jobs) {
     }
   }
   for (const j of jobs) walkCond(j.requires)
+  // ★ 結局的 requires 也是讀取端。漏掉它會讓這道警告【指著對的方向說錯的話】：
+  //   一個只被結局條件讀的 flag 會被誤報成「沒人讀」，而誤報幾次之後
+  //   整份警告就會開始被跳過——那才是真正的損失。
+  for (const e of endings) { walkCond(e.requires); if (e.aim) readFlags.add(e.aim) }
+  // ★ UI 也是讀取端：局末摘要用 s.flags['...'] 呈現玩家的決定。
+  //   那片滓的四種下場就只有摘要在讀（見 App.tsx 的 Stats），
+  //   而「一個不留下任何痕跡的決定」跟沒有這個決定是一樣的——所以摘要【算】讀。
+  for (const dir of ['../src/ui/', '../src/engine/']) {
+    for (const f of fs.readdirSync(new URL(dir, import.meta.url))) {
+      if (!/\.(tsx?|ts)$/.test(f)) continue
+      const src = fs.readFileSync(new URL(dir + f, import.meta.url), 'utf-8')
+      for (const m of src.matchAll(/flags\[['"]([^'"]+)['"]\]/g)) readFlags.add(m[1])
+    }
+  }
   // 引擎自己會設的 flag（不是資料設的），列入白名單
   const ENGINE_SET = ['wears-local']
   for (const f of ENGINE_SET) setFlags.add(f)
