@@ -84,3 +84,28 @@
     id: npc-market-scribe
     acquaintance: 4
     trust: 2
+- id: job-cinder-drill
+  name: 巷尾武館的對練
+  at: bh:cinder
+  when:
+    - 6
+    - 19
+  minutes: 180
+  payCopper: 0
+  hireChance: 1
+  maxPerDay: 1
+  requires:
+    flag: ladder-prentice-in
+  costs:
+    stamina: -30
+    hygiene: -10
+  npcOnComplete:
+    id: npc-quays-foreman
+    acquaintance: 2
+    trust: 1
+  tell: |-
+    教頭數到十五就停，不管你撐到第幾分鐘。
+  desc: |-
+    掄鹽袋、近身、上圓木。三個時辰，一個銅都沒有——
+    這一章的代價就是錢：每個訓練日放棄十二到十五銅。
+  src: 'canon:combat-doctrines.md 鹵港鹽袋巷戰流派的訓練內容與傳承機構；derived:0 銅——武館收的是學費不是發薪，代價是當日放棄的日薪 12–15 銅'

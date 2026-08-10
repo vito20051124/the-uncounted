@@ -2661,3 +2661,942 @@
         flag: saw-workshop
       resultText: 你走出工坊。身後只有鑿子的聲音，一下、一下，很慢。
   src: canon:faction-silentcourt-craft 無血工藝全程純機械；canon-07 §5 外來之物電量單調遞減
+- id: ev-ch4-open
+  name: ★ 有繭的手
+  requires:
+    all:
+      - flag: identity-obtained
+      - day: '>=8'
+  once: true
+  weight: 84
+  text: |-
+    你在打水的時候看到自己的手。
+
+    虎口那一圈皮硬了，指根有三個地方也硬了，指甲縫是洗不掉的灰。這雙手一個月前是軟的。
+
+    你想起換上本地舊衣的那一天——那時候你想的是「不再被注意」。
+
+    現在不一樣了。不再被注意已經達成，而它突然不夠了。
+
+    你開始想的是：**有沒有什麼事，是別人會特地來找你做的。**
+  choices:
+    - label: 看著它，然後繼續打水
+      cost:
+        minutes: 5
+      resultText: |-
+        水桶滿了。你把它拎起來，走回去。
+
+        沒有人替你回答那個問題。這座城不欠你一個答案。
+  src: 'derived:00_pillars.md 支柱一第 4 層；02_character_and_items.md §5 本地舊衣的「不再被注意」'
+
+- id: ev-ladder-lyceum-notice
+  name: 附屬院的招生告示
+  requires:
+    all:
+      - at: bh:market
+      - flag: identity-obtained
+      - day: '>=9'
+      - npc:
+          id: npc-market-scribe
+          axis: acquaintance
+          is: '>=25'
+      - not:
+          flag: ladder-lyceum-read
+  once: true
+  weight: 62
+  text: |-
+    穗爾把一疊要抄的紙推給你。「三份，抄工整一點，別漏字。」
+
+    最上面那張是聖鹵大聖堂附屬院的招生告示。
+
+    你一個字一個字抄。這是你在這個世界寫過最長的一篇東西——四百多個字，抄到手腕發酸。
+
+    抄到第六項：
+
+    **「入學條件：品階微感或常階。旁聽生考核第一項為基礎靈血感知力測試。」**
+
+    你的筆停在那一行的中間。
+
+    拒絕她的人不在場。她自己把那句拒絕抄了一遍，而且抄得很工整。
+  choices:
+    - label: 抄完它
+      cost:
+        minutes: 45
+      gain:
+        flag: ladder-lyceum-read
+      resultText: |-
+        你把那三份都抄完了，一個字都沒漏。
+
+        穗爾檢查的時候在第六項上停了一下，然後什麼都沒說，把紙收進袋子裡。
+
+        後來你才算出那扇門後面是什麼：學費十五個金帝一年，修業六年。
+        而旁聽生的津貼是一年一到五個金帝——**比你扛鹽袋還窮。**
+
+        門後面的第一年比你現在更難過。這件事你想了很久，不確定算不算安慰。
+    - label: 問穗爾那一項是什麼意思
+      cost:
+        minutes: 60
+      gain:
+        flag: ladder-lyceum-read
+        npc:
+          id: npc-market-scribe
+          acquaintance: 6
+          trust: 5
+      resultText: |-
+        「感知力測試。」她說，「把一枚血晶放在你手心，你要說出它是溫的還是冷的。」
+
+        你問說不出來會怎樣。
+
+        「就是說不出來。」她把筆放下，「我也說不出來。」
+
+        你抬起頭。
+
+        「我十九歲去試過。」穗爾說得很平，「所以我在這裡抄紙。」
+
+        她重新拿起筆。「那個名冊上有五萬五千個人。」
+
+        你後來自己算了一下：全境一百二十萬人，五萬五千是**百分之四點六**。
+
+        **門外站著另外一百一十四萬個人。你不是被排除的那一個，你是那一百一十四萬。**
+  src: 'canon:curriculum-and-ranks.md 旁聽生考核第一項為基礎靈血感知力測試；schools-and-lineages.md 九大學派入學條件微感或常階、神學院學費 15 金帝/年修業 6 年；derived:學銜五級持有者 55,285／全境約 120 萬 = 4.6%'
+
+- id: ev-ladder-iron-counter
+  name: ★ 鹽潮分會的門檻表
+  requires:
+    all:
+      - at: bh:quays
+      - flag: identity-obtained
+      - day: '>=10'
+      - not:
+          flag: ladder-iron-seen
+  once: true
+  weight: 70
+  text: |-
+    萬路獵手公會鹽潮分會就在碼頭區的石屋裡，門口釘著一塊木牌，六級認證的門檻表。
+
+    你本來只是路過。然後你看到最下面那一格：
+
+    ```
+    殘鐵級（Scrap-Iron）
+      品階門檻：0 靈聾 ～ 1 微感
+      許可任務：城市治安巡邏、小型害獸清剿
+    ```
+
+    你站在那裡把它讀了三遍。
+
+    **這是你來到這個世界之後，第一次在制度的文字裡看到自己合格。**
+
+    不是「勉強可以」，不是「特例通過」。是門檻表上第一行就寫著你這種人。
+  choices:
+    - label: 進去問怎麼登記
+      cost:
+        minutes: 40
+      gain:
+        flag: ladder-iron-seen
+      resultText: |-
+        櫃台後面的書記聽完，翻開一本簿子。
+
+        「先要品階鑑定金屬牌。」
+
+        你問那是什麼。
+
+        「證明你是幾階的牌子。六級認證都要，沒有牌子不能登記。」他報了價：**兩個金帝。**
+
+        四百八十銅。
+
+        你在心裡拿它除你一天的淨額——不是日薪，是扣掉吃、喝、住之後剩下的那幾枚。
+
+        你算出來的數字讓你停了一下，然後又算了一次。
+
+        「那牌子在哪裡辦？」
+
+        他說出四個地方：泉冕宮廷水脈學府、歸復教會聖座大聖堂、青野交易所精算處、
+        萬路獵手公會總會所。
+
+        你問哪一個最近。
+
+        「春冕都。」他說，「分會不是總會所。」
+
+        **制度說你合格。地理和價目表說你不行。**
+    - label: 問撫恤金那一欄
+      cost:
+        minutes: 30
+      gain:
+        flag: ladder-iron-seen
+      resultText: |-
+        表格最下面有一行小字：認證者因公殞命，撫恤金一百二十至三百金帝，支付給家屬。
+
+        「受款人那一欄，」你問，「要寫誰？」
+
+        書記抬起頭看了你一眼。這是他第一次真的看你。
+
+        「空著也可以。」他說。
+
+        然後他補了一句，語氣沒有變：「空著的比你想的多。」
+    - label: 記住價錢，走開
+      cost:
+        minutes: 10
+      gain:
+        flag: ladder-iron-seen
+      resultText: |-
+        你把「兩個金帝」記住了，然後走開。
+
+        那塊木牌還釘在那裡。它不會因為你走開而改掉那一行。
+  src: 'canon:adventurers-and-wardens.md 殘鐵級品階門檻 0靈聾～1微感、鹽潮分會位於鹵港鹽埠區；awakening-and-ascent.md 鑑定費 2 金帝、鑑定牌為六級認證強制前提、四家權威鑑定機構窮舉'
+- id: ev-ladder-prentice-intro
+  name: ★ 巷尾的私人武館
+  requires:
+    all:
+      - at: bh:cinder
+      - flag: identity-obtained
+      - day: '>=10'
+      - any:
+          - npc:
+              id: npc-quays-foreman
+              axis: trust
+              is: '>=40'
+          - npc:
+              id: npc-quays-hand
+              axis: trust
+              is: '>=35'
+          - flag: path-token
+      - not:
+          flag: ladder-prentice-in
+  once: true
+  weight: 74
+  tell: 供養不是資助。
+  text: |-
+    灰棚巷最裡面那條巷子的盡頭有一間沒有招牌的屋子，門開著，裡面有人在打。
+
+    不是打架。是十幾個人排成兩列，手上拿著粗麻布捆的鹽袋，一下一下地掄。
+
+    引薦你的人在門口跟教頭說了幾句。教頭走出來，上下看你一遍，
+    然後伸手捏了一下你的小臂。
+
+    「碼頭的？」
+
+    你說是。
+
+    「那還有救。」他把手放下，「這裡教的是鹽袋巷戰。不是騎士那一套，
+    沒有陣型、沒有長兵、打不了遠的。就是近身、就是狠、就是誰先倒。」
+
+    他報價：一年兩個金帝。
+
+    然後他看了你一眼，補了一句：
+
+    「你付不起。所以有兩條路。」
+  choices:
+    - label: 問幫派供養那一條
+      cost:
+        minutes: 45
+      gain:
+        flag:
+          - ladder-prentice-in
+          - prentice-by-gang
+      resultText: |-
+        「灰棚巷有人會出這筆錢。」教頭說得很直，「他們養過不少人。」
+
+        你問代價。
+
+        他沒有立刻答。他先把門邊那根木棒扶正，然後才說：
+
+        **「供養不是資助。供養的意思是，有一天他們會叫你去做一件事，而你不能說不。」**
+
+        「那一天可能三年後，可能下個月。你答應的時候不知道是哪一天，
+        也不知道是什麼事。」
+
+        他看著你：「還要嗎？」
+
+        你說要。
+
+        他在門邊的木板上刻了一道。「明天卯時。遲到不等。」
+    - label: 問工會旬僱名冊那一條
+      requires:
+        flag: path-token
+      cost:
+        minutes: 45
+      gain:
+        flag:
+          - ladder-prentice-in
+          - prentice-by-guild
+          - guild-roll
+      resultText: |-
+        「你有工牌。」教頭把你的木牌翻過來看了一眼，「那就走工會。」
+
+        「碼頭工會每旬僱一批人，名冊上的人可以來這裡練，錢工會出——
+        因為練過的人搬貨時比較不會死，而死一個人工會要賠。」
+
+        他把你的工牌推回來。
+
+        「所以這不是好心。是他們算過。」
+
+        他在門邊的木板上刻了一道，然後在旁邊那本冊子上多寫了一行。
+
+        **那是第二本寫著你名字的冊子。**
+    - label: 算了，兩條都不好
+      cost:
+        minutes: 15
+      resultText: |-
+        你搖頭。教頭聳肩，轉身走回去，沒有再看你。
+
+        身後那十幾個人繼續一下一下地掄。
+
+        你走出巷子的時候還聽得到那個聲音。
+  src: 'canon:combat-doctrines.md 鹵港鹽袋巷戰流派發源地灰棚巷與老鹽街、傳承機構含鹵港碼頭工會與地下幫派與巷尾私人武館、學費 2–5 金帝/年或幫派供養；training-and-ranks.md 技階＝技藝評定與靈血品階無關'
+
+- id: ev-ladder-prentice-test
+  name: ★ 十五分鐘
+  requires:
+    all:
+      - at: bh:cinder
+      - flag: ladder-prentice-in
+      - day: '>=16'
+      - needs:
+          stamina: '>40'
+      - not:
+          injury:
+            minSeverity: 2
+      - not:
+          flag: rank-prentice-listed
+  once: true
+  weight: 78
+  text: |-
+    今天教頭沒有讓你練。他讓你排進隊裡。
+
+    「學徒考核。十五分鐘連續體能加基礎套路，最後上圓木避鈍擊。」
+
+    他說完就開始數。
+
+    你撐了四分鐘。
+
+    第五分鐘的時候你的小臂不聽話了，鹽袋掄到一半就往下墜，教頭伸手接住它，
+    沒有讓它砸到你的腳。
+
+    「下去。」
+
+    你坐在牆邊喘。旁邊有兩個人也下來了，一個十七歲，一個看起來比你老。
+
+    十五分鐘結束之後，教頭走到門邊那本冊子前面，翻開，寫了一行。
+
+    你走過去看。上面寫著你的名字，後面四個字：
+
+    **「一年以後再測。」**
+  choices:
+    - label: 問這行算什麼
+      cost:
+        minutes: 20
+      gain:
+        flag: rank-prentice-listed
+        npc:
+          id: npc-quays-foreman
+          trust: 5
+      resultText: |-
+        「算你在名冊上。」教頭把冊子闔上。
+
+        「學徒要練一年到兩年，這是規矩，我不能給你。技階是武館、騎士團跟行會發的，
+        不是我心軟就能發。」
+
+        他把木棒靠回牆邊。
+
+        「但名冊上有你的名字，一年以後你回來，我認得。」
+
+        你問要是一年以後你不在鹵港了呢。
+
+        他這次真的笑了：「那就在別的地方測。**技階跟你在哪沒關係，跟你的手有關係。**」
+
+        —— 那本冊子上沒有木棒，沒有銅扣皮帶，沒有任何可以拿在手上的東西。
+        只有一行字，和一個一年後的日子。
+    - label: 什麼都不問，回去練
+      cost:
+        minutes: 30
+        stamina: -10
+      gain:
+        flag: rank-prentice-listed
+      resultText: |-
+        你站起來，走回隊伍後面，把鹽袋重新拎起來。
+
+        教頭看了你一眼，沒有阻止。
+
+        那天你多練了半個時辰，隔天小臂痛得抬不起來。
+
+        名冊上那一行字沒有因為你多練半個時辰而改變——但你知道它在那裡。
+  src: 'canon:training-and-ranks.md 學徒考核＝15 分鐘連續體能與基礎套路、圓木避鈍擊、授階者為武館騎士團與行會、訓練年限 1–2 年；:168 碼頭工人技階映射封頂於學徒'
+
+- id: ev-ladder-hollow-bench
+  name: ★ 那塊沒刻完的青石片
+  requires:
+    all:
+      - at: bh:grotto
+      - flag: identity-obtained
+      - flag: saw-workshop
+      - day: '>=10'
+      - npc:
+          id: npc-grotto-elder
+          axis: affection
+          is: '>=35'
+      - not:
+          flag: hollow-bench
+  once: true
+  weight: 72
+  text: |-
+    石啞把工作檯角落那塊石片推到你面前。
+
+    就是那一塊——他當初開始替你刻擔保狀、而你說你不配的那一塊。它一直放在那裡。
+
+    他比了三個手勢。年輕石匠替他翻譯，聲音壓得很低：
+
+    「長老說：刻完它。」
+
+    然後石啞把鑿子交到你手上，握著你的手腕比了一下角度，放開。
+
+    你敲了第一下。歪的。
+
+    他沒有搖頭，也沒有點頭。他只是等你敲第二下。
+  choices:
+    - label: 刻完它
+      cost:
+        minutes: 240
+        stamina: -12
+      gain:
+        flag:
+          - hollow-bench
+          - hollow-roll
+        npc:
+          id: npc-grotto-elder
+          acquaintance: 10
+          trust: 12
+          affection: 8
+      resultText: |-
+        花了四個時辰。刻到最後你的右手在抖，但那八個字刻完了。
+
+        石啞把它浸進水裡，拿出來，看了很久。
+
+        然後他把它放回工作檯的角落——不是給你，是放回原位。
+
+        年輕石匠說：「長老說，這塊留在這裡。」
+
+        你問為什麼。
+
+        「因為你會再刻。」
+
+        那天之後你開始跟著他們做事。全部都是純手的活：
+        打磨、過濾、用竹籤數數、把桶押到牆邊排好。沒有一樣需要靈血——
+        **這是這個世界上，她最沒有障礙的一整類東西。**
+
+        （你也開始學那些手勢。你二十四歲才學，所以你永遠會有口音——
+        詞跟詞之間停太久，詞裡面又太急。石窟街的人聽你講話要多花一點力氣。
+        他們沒有說過這件事，但你看得出來。）
+    - label: 說你的手不穩
+      cost:
+        minutes: 20
+      resultText: |-
+        你把鑿子放回檯子上。
+
+        石啞看了那塊石片一眼，又看了你的手一眼，然後點了一下頭。
+
+        他沒有把石片收起來。
+
+        它還在那個角落。
+  src: 'canon:canon-07 §4.2.1 寂裔無血工藝是她最沒有障礙的一整類器物、純草藥代謝與常人無異；beatrice-harrow.md 成年後才學手勢靜語會有口音（詞間停太久、詞內太急）；districts.md 石窟街 800 人中已有 300 名非寂裔'
+
+- id: ev-ladder-hollow-sign
+  name: ★★ 你打的那批我簽名
+  requires:
+    all:
+      - at: bh:grotto
+      - flag: hollow-bench
+      - day: '>=18'
+      - npc:
+          id: npc-grotto-elder
+          axis: trust
+          is: '>=50'
+      - not:
+          any:
+            - flag: hollow-signed
+            - flag: hollow-declined
+  once: true
+  weight: 80
+  tell: 這件事的風險是他的，不是你的。
+  text: |-
+    你做完的那批閥銷擺在檯上，二十四個。
+
+    石啞一個一個拿起來看，看完全部之後把它們排成一列，然後比了一串手勢。
+    這一串很長。
+
+    年輕石匠翻譯到一半停下來，看了石啞一眼，像在確認。石啞點頭，他才繼續：
+
+    「長老說，鑿級他給不了。」
+
+    「鑿級要行會大師會議，要登錄。他一個人說了不算。」
+
+    停頓。
+
+    「他說的是——**你打的那批，他簽名。**」
+
+    你不完全懂那是什麼意思。年輕石匠替你補了：
+
+    「意思是那批東西出去的時候，上面是他的印。人家問是誰做的，他說是他做的。」
+
+    「若被查出來不是他做的，他的資格可能會被撤。」
+
+    **這件事的風險是他的，不是你的。**
+  choices:
+    - label: 接下
+      cost:
+        minutes: 60
+      gain:
+        flag: hollow-signed
+        npc:
+          id: npc-grotto-elder
+          trust: 20
+          affection: 15
+          fact: ★ 他把自己的印押在你做的東西上
+      resultText: |-
+        你說好。
+
+        石啞拿出他的印，一個一個押上去。二十四個，押得很慢。
+
+        押完之後他把印收回懷裡，然後做了一個你看過的手勢——
+        兩隻手掌相對，然後扣在一起。
+
+        「同的。」
+
+        —— 那批東西後來運去了上城，裝在一組精密符文閥門上。
+        買主付了五個金帝，錢進了工坊的帳。
+
+        沒有人知道那二十四個閥銷是一個二十四歲的、說話有口音的女人磨的。
+
+        **但它們在那裡。而那是別人拿得走的東西。**
+    - label: 拒絕，不讓他擔這個
+      cost:
+        minutes: 45
+      gain:
+        flag: hollow-declined
+        npc:
+          id: npc-grotto-elder
+          affection: 12
+          fact: ★ 你不肯讓他擔那個風險
+      resultText: |-
+        「不要。」你說。「你會失去資格。」
+
+        年輕石匠把話比給石啞看。
+
+        石啞聽完，愣了一下——你第一次看到他愣。
+
+        然後他把印收回懷裡，坐回他的位置，拿起鑿子。
+
+        年輕石匠替他說了最後一句：「長老說：『我知道。』」
+
+        「他說他問過三個人，你是第一個說不要的。」
+
+        那批閥銷後來由另一個石匠押印運走了。你的手沒有出現在任何地方。
+
+        **而你走出石窟街的時候，是抬著頭走的。**
+  src: 'canon:brek-anneal.md 歐倫先例——非寂裔學徒拿不到任何一級鑿級，理由是「需要行會大師會議與登錄」（行政門檻），而長老能給的是「你打的那批我簽名」；寂庭工坊業務含上城精密符文閥門 5 金帝'
+- id: ev-named-wound
+  name: ★ 來找你的是他自己
+  requires:
+    all:
+      - at:
+          - bh:alley
+          - bh:quays
+      - flag: identity-obtained
+      - day: '>=12'
+      - has:
+          item: item-salve
+      - not:
+          flag: named-wound
+  once: true
+  weight: 66
+  text: |-
+    一個碼頭工人蹲在你旁邊，把左手伸出來。
+
+    虎口裂了一道，不深，但邊緣已經開始泛白。
+
+    「你上次幫老陳包的那個。」他說，「他說你包的不會鬆。」
+
+    你問他為什麼不去救濟院。大聖堂那邊是免費的。
+
+    「去過。」他把手翻過來，「他們給我聖水擦，跟我說會好。」
+
+    他頓了一下。
+
+    「我不是不信。我是要搬東西。」
+
+    —— 救濟院給的是聖水跟一句「會好」。你給的是把它綁緊，
+    綁到他今天還能搬四趟。**這兩件事不一樣，而他知道哪一件他現在需要。**
+  choices:
+    - label: 包給他
+      cost:
+        minutes: 30
+      spend:
+        item: item-salve
+      gain:
+        namedAsk: true
+        flag: named-wound
+      resultText: |-
+        你把他的手洗了，敷上藥膏，用布繞了三圈，最後那一圈壓在虎口下面收緊。
+
+        他動了動手指，握了一下拳。
+
+        「這樣可以。」
+
+        他站起來要走，走了兩步回頭：「多少錢？」
+
+        你說不用。
+
+        他看了你一會兒，然後點頭。「下次我帶布來。」
+
+        —— 那一劑藥膏是你自己的。你原本留著給自己用。
+    - label: 收他一銅
+      cost:
+        minutes: 30
+      spend:
+        item: item-salve
+      gain:
+        copper: 1
+        namedAsk: true
+        flag: named-wound
+      resultText: |-
+        「一銅。」你說。
+
+        他從腰帶裡摸了很久，掏出一枚，放在你手上。是溫的。
+
+        你把他的手包好。
+
+        他走了之後你看著那一枚銅。它跟你扛一趟貨賺的沒有差別，
+        但它是**別人為了你會做的一件事而付的**。
+
+        這是第一次。
+    - label: 叫他去救濟院
+      cost:
+        minutes: 10
+      resultText: |-
+        「我不會弄。」你說，「你去大聖堂。」
+
+        他點頭，站起來走了，沒有多說。
+
+        那天下午你看到他在搬東西，左手包著別人幫他包的布，繞了兩圈。
+
+        繞兩圈是會鬆的。
+  src: 'canon:rites-without-magic.md 歸復教會把代寫書信與凡俗救濟列為無償項目；canon-07 §4.2 純草藥對她代謝正常；saltmarch-herbal.md 苦鹽苔藥膏 1 銅/劑'
+
+- id: ev-named-letter
+  name: ★ 他要你寫，不要穗爾寫
+  requires:
+    all:
+      - at: bh:market
+      - flag: identity-obtained
+      - flag: bond-scribe-1
+      - day: '>=12'
+      - not:
+          flag: named-letter
+  once: true
+  weight: 66
+  text: |-
+    一個老人在穗爾的攤子前面站了很久，但他不看穗爾。他看你。
+
+    「你寫。」
+
+    穗爾抬頭：「我寫兩銅，她寫……」她停了一下，因為她不知道你收多少。
+
+    「我要她寫。」老人說。
+
+    穗爾放下筆，往旁邊挪了半個位置，什麼都沒說。
+
+    後來你才知道理由。老人的兒子在鹽澤北邊的窯場，識得的字不多。
+
+    **「她寫得太漂亮。」** 老人指著穗爾的字，「我兒子看不懂那種。」
+
+    他指了指你抄壞的那張練習紙——歪的、大的、一筆一畫分開的。
+
+    「這種他看得懂。」
+  choices:
+    - label: 替他寫
+      cost:
+        minutes: 60
+      gain:
+        namedAsk: true
+        flag: named-letter
+        npc:
+          id: npc-market-scribe
+          affection: 6
+      resultText: |-
+        他口述了很久，內容大部分是「吃飯了嗎」「冷不冷」。
+
+        你一個字都沒有省——這是穗爾教你的第一件事。
+
+        寫完之後他看著那張紙，看了很久。他不識字，他只是在看那些字的大小。
+
+        「這個他看得懂。」
+
+        他付了兩銅。你要退一銅給他，他沒有拿。
+
+        穗爾在旁邊抄她自己那一疊，從頭到尾沒有抬頭。
+
+        後來收攤的時候她說了一句：「我十九歲之後就沒有把字寫壞過了。」
+
+        你分不出那是不是羨慕。
+    - label: 讓穗爾寫
+      cost:
+        minutes: 15
+      resultText: |-
+        「她寫比較快。」你說，把位置讓回去。
+
+        老人猶豫了一下，還是坐下了。
+
+        穗爾寫得很漂亮。老人拿著那張紙走的時候，你看到他把它對著光看，
+        像在確認上面到底寫了什麼。
+  src: 'canon:rites-without-magic.md 歸復教會的免費代書是這條線的競爭者；derived:npc-market-scribe 的識字線'
+
+- id: ev-named-count
+  name: ★ 數給我聽
+  requires:
+    all:
+      - at:
+          - bh:grotto
+          - bh:pans
+      - flag: identity-obtained
+      - day: '>=12'
+      - not:
+          flag: named-count
+  once: true
+  weight: 66
+  text: |-
+    工頭把一堆竹籤推到你面前，還有三個裝滿的麻袋。
+
+    「數。」
+
+    你問為什麼是你。這裡有十幾個人。
+
+    他用下巴指了指旁邊那個正在數的年輕人：「他快。」
+
+    然後指了指你：「你不會錯。」
+
+    —— 你算得比這裡任何人都慢。你要在心裡把數字排成一列，一個一個往上加，
+    加到一百的時候還要停一下確認。
+
+    但你從來沒有數錯過。而他們數錯過。
+  choices:
+    - label: 數完三袋
+      cost:
+        minutes: 240
+        stamina: -8
+      gain:
+        namedAsk: true
+        flag: named-count
+        copper: 3
+      resultText: |-
+        四個時辰。三袋，一千一百四十七個。
+
+        你報數字的時候工頭在旁邊的木板上記，記完抬頭：
+
+        「上次那個數出一千兩百。」
+
+        他把三銅放在檯上。「以後有這種活我找你。」
+
+        —— 你沒有告訴他你是怎麼數的（現代人的直式加法，
+        在這裡只是一個沒人教過的怪習慣）。
+        你也永遠不會教別人怎麼做這件事，因為那是你唯一的優勢。
+    - label: 說你數得太慢
+      cost:
+        minutes: 20
+      resultText: |-
+        「我很慢。」你說。
+
+        「我知道。」工頭說，「我看過你數。」
+
+        你還是搖頭。他聳肩，把竹籤推給那個年輕人。
+
+        那天下午那個年輕人數出了一千兩百。沒有人核對。
+  src: 'canon:canon-07 §5.3 唯一許可的例外清單點名「記帳習慣、識字」；derived:粗工日薪 8–15 銅，四個時辰的計數活折 3 銅'
+
+- id: ev-give-soup
+  name: 你今天唯一一頓熱的
+  requires:
+    all:
+      - at: bh:cinder
+      - day: '>=13'
+      - has:
+          item: item-fish-barley
+      - not:
+          flag: gave-soup
+  once: true
+  weight: 60
+  text: |-
+    棚屋之間那個小孩坐在地上，還在排他的石頭。
+
+    他今天排得很慢。你蹲下來的時候他抬頭看你，然後看你手上那碗還是溫的醃魚大麥飯。
+
+    他沒有伸手。他只是看著它，然後轉回去繼續排石頭。
+
+    —— 灰姐不在。這裡沒有人在看。
+  choices:
+    - label: 給他
+      cost:
+        minutes: 20
+      spend:
+        item: item-fish-barley
+      gain:
+        giveAway: true
+        flag: gave-soup
+        npc:
+          id: npc-cinder-woman
+          affection: 8
+      resultText: |-
+        他吃得很快，快到你怕他嗆到。
+
+        吃完他把碗還給你，然後從那排石頭裡挑了一顆，放在你手心。
+
+        是一顆很普通的石頭。
+
+        （那是你今天唯一一份熱的。晚上你會餓——而餓不會因為你做了一件好事就變輕。）
+    - label: 自己吃掉
+      cost:
+        minutes: 15
+      gain:
+        flag: gave-soup
+      resultText: |-
+        你把它吃完了。是溫的，很鹹，比麵包好太多。
+
+        那個小孩沒有再看過來。他繼續排石頭，排到牆邊，然後推倒重排。
+
+        你吃完之後把碗洗了。
+  src: 'canon:districts.md 灰棚巷棚戶與蝕血遺傳徵候；老克瓦「分東西的人不會被搶」；marco-no-pillar.md 鄰居輪流分水'
+
+- id: ev-give-cloth
+  name: 那塊乾淨的布
+  requires:
+    all:
+      - at:
+          - bh:quays
+          - bh:alley
+      - day: '>=15'
+      - has:
+          item: item-bandaid
+      - not:
+          flag: gave-cloth
+  once: true
+  weight: 60
+  tell: 給出去之後，你自己下一次受傷就沒有它了。
+  text: |-
+    闕的手在流血。
+
+    不是大傷，但位置不好——在掌心，握東西就會裂開，而他今天還要搬四個時辰。
+
+    他自己在用衣角壓。衣角是髒的。
+
+    「沒事。」他說，「習慣了。」
+
+    你身上有 OK 繃。這個世界沒有第二片。
+  choices:
+    - label: 給他一片
+      cost:
+        minutes: 20
+      spend:
+        item: item-bandaid
+      gain:
+        giveAway: true
+        flag: gave-cloth
+        npc:
+          id: npc-quays-hand
+          trust: 10
+          affection: 8
+      resultText: |-
+        你撕開那片薄薄的東西，貼上去。
+
+        他盯著自己的手心看了很久。
+
+        「這什麼？」
+
+        你說不出來——你要怎麼解釋一片工廠做的無菌敷料。
+
+        「外面的。」你說。
+
+        他沒有再問。他握了一下拳，那一片沒有掉。
+
+        「這個不會鬆。」
+
+        （你少了一片。你自己下一次受傷，化膿的機會就從不到一成回到三成四。
+        這件事你在給之前就知道了。）
+    - label: 讓他用自己的衣角
+      cost:
+        minutes: 10
+      gain:
+        flag: gave-cloth
+      resultText: |-
+        你什麼都沒說。
+
+        他用衣角壓了一會兒，血止住了，然後他去搬東西了。
+
+        那天下午他的手裂了兩次。第二次他就沒有再壓，直接讓它流。
+  src: 'canon:canon-07 §5 外來之物無法在此世補充；body.ts 無菌敷料化膿率 8% vs 未處置 34%'
+
+- id: ev-give-slot
+  name: 那個名額
+  requires:
+    all:
+      - at: bh:quays
+      - day: '>=17'
+      - npc:
+          id: npc-quays-foreman
+          axis: acquaintance
+          is: '>=40'
+      - not:
+          flag: gave-slot
+  when:
+    hours:
+      - 5
+      - 9
+  once: true
+  weight: 64
+  tell: 讓出去就是今天沒有工錢。
+  text: |-
+    今天的人特別多。老克瓦的粉筆只剩下半截。
+
+    他從人群裡走過來，在你肩上劃了一道——這次沒有停半秒，他認得你的手了。
+
+    然後你聽到後面有人在說話。
+
+    是一個女人，抱著一個很小的孩子，在跟前面的人求：「我只要今天。就今天。」
+
+    前面那個人沒有讓。
+
+    老克瓦已經走到下一排了。他今天只點到這裡。
+  choices:
+    - label: 把肩上那一道擦掉，讓給她
+      cost:
+        minutes: 45
+      gain:
+        giveAway: true
+        flag: gave-slot
+        npc:
+          id: npc-quays-foreman
+          trust: 8
+      resultText: |-
+        你用手把肩上那道粉筆抹掉，走到老克瓦面前，指了指後面那個女人。
+
+        他看了你三秒。
+
+        然後他走過去，在她肩上劃了一道。
+
+        他回來的時候經過你旁邊，沒有停，但說了一句：
+
+        「明天還是五點。」
+
+        —— 今天你沒有工錢。十五銅，你一整天的淨額還不到那個數的一半。
+        晚上你算了一下，你少的不只是十五銅，是往後三天的餘裕。
+    - label: 留著
+      cost:
+        minutes: 10
+      gain:
+        flag: gave-slot
+      resultText: |-
+        你留著。
+
+        那個女人後來走了。她抱著孩子往下城的方向去，走得很慢。
+
+        你今天搬了八個時辰，領到十五銅。
+
+        那十五銅在你手上的時候是溫的，跟平常一樣。
+  src: 'canon:brinehaven/districts.md 碼頭工人日薪 15 銅、監工挑人機制；老克瓦「他不記名字，他記手」'
