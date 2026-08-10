@@ -4,6 +4,7 @@
  * 本檔不含任何規則判斷 —— 所有條件求值一律呼叫 engine 的 evaluate。
  */
 
+import type { VNode } from 'preact'
 import { useMemo, useState } from 'preact/hooks'
 import {
   buildIndex, type Content, type GameState, type ItemId, type NodeId,
@@ -58,6 +59,48 @@ const INTRO = [
   '你套上外套下樓。巷口的便利商店還亮著，店員在補貨架。\n你買了兩個飯糰和一瓶水，收銀機叮了一聲。',
   '推開門，外面在起風。\n\n不是那種吹落葉的風。是一種……從很遠的地方灌過來的風，帶著鐵和鹽的味道。\n你下意識閉上眼睛。',
 ]
+
+/**
+ * ★★ 敘事文本的行內渲染。
+ *
+ * 加它的原因是實跑抓到的一個【從第一天起就存在、而讀 YAML 永遠看不到】的缺陷：
+ * 全部敘事都走 `<p class="narr">{text}</p>`，而 white-space: pre-wrap 只保留換行，
+ * 它【不處理任何標記】——於是 content/ 裡 78 行的 `**強調**` 與 19 處的 `---`
+ * 一路把星號和減號原字印在玩家眼前。
+ *
+ * 我一直在讀 .yaml，而不是看畫面。這正是「宣告不等於驗收」的那個形狀，
+ * 也正是為什麼可玩性驗收只能靠人玩（design/00_pillars.md 的既有裁決）。
+ *
+ * ★ 刻意只做三條規則、不引入 markdown 函式庫：內容是自己寫的、離線、無 CDN，
+ *   而一個 markdown 解析器會把「內容零邏輯」變成「內容有一整套語法」。
+ *   要新語法就明確加一條——不要讓它默默長大。
+ */
+function inline(s: string) {
+  const out: Array<string | VNode> = []
+  const re = /\*\*([^*\n]+)\*\*|\*([^*\n]+)\*/g
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = re.exec(s)) !== null) {
+    if (m.index > last) out.push(s.slice(last, m.index))
+    out.push(m[1] !== undefined ? <strong>{m[1]}</strong> : <em>{m[2]}</em>)
+    last = m.index + m[0].length
+  }
+  if (last < s.length) out.push(s.slice(last))
+  return out
+}
+
+/** 一段敘事：空行分段，單獨一行的 `---` 是分隔線。 */
+function Narr({ text, cls }: { text: string; cls?: string }) {
+  return (
+    <>
+      {text.split('\n\n').map((p, i) => (
+        p.trim() === '---'
+          ? <hr class="narr-hr" key={i} />
+          : <p class={cls ? `narr ${cls}` : 'narr'} key={i}>{inline(p)}</p>
+      ))}
+    </>
+  )
+}
 
 /** ★ 0 = 紅，100 = 綠，中間連續插值。讓玩家看得出「正在變差」而不是「已經很差」。 */
 function needColor(v: number): string {
@@ -166,7 +209,7 @@ export function App() {
         <div class="intro">
           <h1>無籍者</h1>
           <div class="sub">THE UNCOUNTED · 瑟瑞恩 C.R. 837 枯收季</div>
-          <p class="narr">{INTRO[introStep]}</p>
+          <Narr text={INTRO[introStep] ?? ''} />
           <div style="margin-top:26px">
             <button class="choice" style="width:100%" onClick={() =>
               introStep < INTRO.length - 1 ? setIntroStep(introStep + 1) : setPhase('pick')}>
@@ -241,7 +284,7 @@ export function App() {
       <div class="center-stage">
         <div class="intro">
           <div class="sec-label hot">最後一段</div>
-          {log.map((l) => <p class="narr log">{l}</p>)}
+          {log.map((l, i) => <Narr key={i} text={l} cls="log" />)}
           <div style="margin-top:24px">
             <button class="choice" style="width:100%" onClick={() => { setDying(false); setPhase('end') }}>
               ……
@@ -395,9 +438,9 @@ export function App() {
         <div class="zone-head">{travelTo ? '選擇路線' : ev ? '事件' : '此地'}</div>
         <div class="center-split">
           <div class="narr-area">
-            {log.length === 0 ? <p class="narr">{here.desc}</p> : log.map((l) => <p class="narr log">{l}</p>)}
+            {log.length === 0 ? <Narr text={here.desc} /> : log.map((l, i) => <Narr key={i} text={l} cls="log" />)}
             {ev && !travelTo && ev.tell && <div class="tell">{ev.tell}</div>}
-            {ev && !travelTo && <p class="narr">{ev.text}</p>}
+            {ev && !travelTo && <Narr text={ev.text} />}
             {travelTo && (
               <div class="route-banner">
                 你正在選擇前往 <strong>{IDX.node.get(travelTo)!.name}</strong> 的路線。下方地圖會標出你滑過的那一條。<br />
@@ -882,9 +925,9 @@ function EndScreen({ s, res, onLoad, slotList }: {
         <div class="summary">
           <div class="sec-label hot">{d.name}</div>
           <div class="ending-tag">{d.tagline}</div>
-          {d.text.split('\n\n').map((p) => <p class="narr">{p}</p>)}
+          <Narr text={d.text} />
           <div class="sec-label" style="margin-top:22px">你放棄的</div>
-          <div class="ending-gave">{d.gaveUp}</div>
+          <div class="ending-gave">{inline(d.gaveUp)}</div>
           <div class="sec-label" style="margin-top:22px">這一輪</div>
           <Stats s={s} />
           <div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap">
@@ -914,7 +957,7 @@ function EndScreen({ s, res, onLoad, slotList }: {
             <div class="door">
               <div class="door-name">{d.name}</div>
               <div class="door-tag">{d.tagline}</div>
-              <div class="door-asks">{d.asks}</div>
+              <div class="door-asks">{inline(d.asks)}</div>
             </div>
           ))}
         </div>

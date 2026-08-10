@@ -157,6 +157,51 @@ for (const j of jobs) {
   }
 }
 
+// ②-bis ★★ 玩家看得到的欄位裡不得出現設計註記。
+//
+// 為什麼需要這一道：瀏覽器實跑第五章時，「還沒有」畫面上並排印出三扇門，
+// 而其中一扇門的 asks 寫著「★ 這是三條裡唯一用錢的一條，也理應是最緊的一條」——
+// 那就是【在畫面上替三條結局排序】，逐字違反 engine/ending.ts 檔頭自己訂的版面禁令。
+// 同一輪還抓到 end-trade 的正文對玩家說「canon 寫得很明白」（破第四面牆）。
+//
+// ★ 兩者都是我自己寫的，而且都通過了當時全部的驗收——因為【沒有人在檢查這件事】。
+//   設計理由該留在 YAML 註解裡；一旦它進了 asks／gaveUp／text，它就是台詞。
+//
+// ★ 刻意【不查 name】：事件名會出現在死亡回溯的決策鏈裡，
+//   而「★★ 城衛查籍」這種標記主線份量的寫法是既有的、刻意的慣例。
+{
+  const MARK = [
+    ['★', '設計標記'],
+    ['canon', '正典檔名／術語（玩家不知道 canon 是什麼）'],
+    ['.md', '檔名'],
+    ['design/', '設計文件路徑'],
+    ['支柱', '遊戲憲法術語'],
+    ['禁忌', '遊戲憲法術語'],
+    ['違憲', '遊戲憲法術語'],
+    ['reducer', '程式術語'],
+    ['遊戲不會', '以「遊戲」自稱＝破第四面牆'],
+    ['遊戲也不', '以「遊戲」自稱＝破第四面牆'],
+    ['遊戲不得', '以「遊戲」自稱＝破第四面牆'],
+  ]
+  const scan = (id, field, txt) => {
+    if (typeof txt !== 'string') return
+    for (const [needle, why] of MARK) {
+      if (!txt.includes(needle)) continue
+      const line = txt.split('\n').find((l) => l.includes(needle)) ?? txt
+      errors.push(`${id} 的 ${field} 含設計註記「${needle}」（${why}）——這是玩家看得到的欄位，`
+        + `理由請移到 YAML 註解：「${line.trim().slice(0, 60)}」`)
+    }
+  }
+  for (const e of events) {
+    scan(e.id, 'text', e.text); scan(e.id, 'tell', e.tell)
+    for (const c of e.choices ?? []) { scan(e.id, `choices[${c.label}].resultText`, c.resultText); scan(e.id, 'choice label', c.label) }
+  }
+  for (const e of endings) {
+    scan(e.id, 'text', e.text); scan(e.id, 'asks', e.asks)
+    scan(e.id, 'gaveUp', e.gaveUp); scan(e.id, 'tagline', e.tagline)
+  }
+}
+
 // ③ flag 雙向斷鏈：讀了沒人設 = 錯誤；設了沒人讀 = 警告
 {
   const setFlags = new Set()
