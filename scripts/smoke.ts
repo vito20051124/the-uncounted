@@ -160,7 +160,14 @@ T(2, '里程碑（本地舊衣 22 銅）在窗口內可達', a.s.stats.earnedCop
 }
 
 // ⑤ Pareto（由 pareto-check.ts 單獨驗證）
-T(5, 'Pareto 路線列舉判準', true, '見 npm run pareto（15/12、18/4、8/2 全 PASS）')
+/**
+ * ★★ 這裡本來是 `T(5, 'Pareto 路線列舉判準', true, '見 npm run pareto（15/12、18/4、8/2 全 PASS）')`
+ *    ——一條【恆真斷言】，而且連引用的數字都是舊的（實測早已是 29/29/16）。
+ *
+ * 恆真斷言比沒有斷言更貴：它讓總項數看起來更可靠，而它什麼都沒驗。
+ * Pareto 的判準由 pareto-check.ts 自己 exit 1，已在 npm run check 的鏈上，
+ * 所以這裡不需要一個假的佔位項。刪掉它，項數少一個但每一項都是真的。
+ */
 
 // ⑥ 潮汐讓邊從圖上消失
 const sEbb = { ...initialState('x', 'bh:quays', [], IDX), clock: { day: 2, minute: 14 * 60 } }

@@ -210,9 +210,37 @@ const totalSrc = canonN + derivedN + inventedN
 const inventedPct = totalSrc ? (inventedN / totalSrc) * 100 : 0
 if (inventedPct > 20) E(`invented 比例 ${inventedPct.toFixed(1)}% 超出 20% 上限`)
 
-// 未被任何邊連到的孤立節點
-for (const n of nodes) {
-  if (!edges.some((e) => e.a === n.id || e.b === n.id)) warns.push(`node ${n.id} 是孤點（沒有任何邊連到它）`)
+/**
+ * 節點連通性。
+ *
+ * ★ 舊版寫 `edges.some(e => e.a === id || e.b === id)`——那只問「有沒有一條邊碰到它」。
+ *   一條 learned 邊、或一條只在退潮開放的邊，都能讓一個實際上到不了的節點通過。
+ *   對抗式攻擊正是這樣做出一個「掛著一條學不到的邊」的死節點，而八道閘全綠。
+ *
+ * ★★ 改成從真起點做【公開邊】的連通分量：learned 邊一律【不算】，
+ *   因為它們要先學會，而「學得到嗎」是另一道閘的事（live-reach 的 R2）。
+ *   潮汐邊算，因為潮汐每天都會轉——它限制時機不限制可達性。
+ *   這樣它問的是：「一個什麼都還不知道的人，走得到這裡嗎？」
+ */
+{
+  const START = 'bh:alley' // 抵達點（App.tsx 的 initialState）
+  const adj = new Map(nodes.map((n) => [n.id, []]))
+  for (const e of edges) {
+    if (e.knowledge === 'learned') continue
+    adj.get(e.a)?.push(e.b)
+    adj.get(e.b)?.push(e.a)
+  }
+  const seen = new Set([START])
+  const queue = [START]
+  while (queue.length > 0) {
+    for (const nx of adj.get(queue.shift()) ?? []) if (!seen.has(nx)) { seen.add(nx); queue.push(nx) }
+  }
+  for (const n of nodes) {
+    if (seen.has(n.id)) continue
+    E(`node ${n.id}（${n.name}）從抵達點 ${START} 【只靠公開路段到不了】——`
+      + ` 掛著一條 learned 邊不算可達（那條邊要先學會，而學得到嗎是另一件事）。`
+      + ` 玩家會看到一個永遠進不去的城區。`)
+  }
 }
 
 
@@ -279,6 +307,63 @@ for (const j of jobs) {
       if (ch.gain?.learnRoute) taught.set(ch.gain.learnRoute, ev.id)
     }
   }
+  /**
+   * ★★ L06／L09：存在性不等於可達性。
+   *
+   * ④ 原本全部的內容就是 `taught.has(e.id)`——它從不看那個教學事件的條件。
+   * 對抗式攻擊做出四種都能過關的死邊，其中三種是【局部可判定】的：
+   *   · 自我指涉：教 X 的事件要求「已經知道 X」（漏了一個 not）
+   *   · 結構恆假的閘門：day >= 45、all 底下兩個互斥時窗（事件層與 choice 層都有）
+   *   · 教學選項自己的 requires 恆假，但事件本身可達
+   * （剩下兩種——地理雞生蛋與兩條邊互鎖——只有不動點閉包抓得到，排在 live-reach。）
+   */
+  const { unsat } = await import('./cond-sat.mjs')
+  const satEnv = {
+    lastDay: LAST_DAY,
+    npcTotal: npcs.length,
+    offWageTotal: npcs.filter((n) => !new Set(jobs.map((j) => j.at)).has(n.at)).length,
+  }
+  for (const ev of events) {
+    for (const [i, ch] of (ev.choices ?? []).entries()) {
+      const r = ch.gain?.learnRoute
+      if (!r) continue
+      // ① 教學事件／選項的條件不得【可證明恆假】
+      for (const [w, c] of [['where', ev.where], ['when', ev.when], ['requires', ev.requires],
+        [`choices[${i}].requires`, ch.requires]]) {
+        const why = unsat(c, satEnv)
+        if (why) {
+          E(`event ${ev.id} 教 ${r}，但它的 ${w} 【結構上永遠為假】：${why}`
+            + ` —— 那條 learned 邊永久學不到，地圖上會以虛線永久釣著玩家。`)
+        }
+      }
+      // ② 自我指涉：教 X 的事件不得【正向】要求已經知道 X（漏一個 not 就是這個形狀）
+      const positiveKnows = new Set()
+      const walkPos = (c) => {
+        if (!c || typeof c !== 'object') return
+        if (c.knowsRoute) positiveKnows.add(c.knowsRoute)
+        // ★ 刻意不下鑽 not：not:{knowsRoute:自己} 正是三個 ev-learn-* 的標準寫法
+        for (const sub of [...(c.all ?? []), ...(c.any ?? [])]) walkPos(sub)
+      }
+      walkPos(ev.requires); walkPos(ev.where); walkPos(ev.when); walkPos(ch.requires)
+      if (positiveKnows.has(r)) {
+        E(`event ${ev.id} 教 ${r}，但它的條件【正向】要求已經知道這條路（不在 not 底下）——`
+          + ` 自我指涉，永遠不觸發。全庫 ev-learn-* 的慣例是 not: { knowsRoute: 自己 }，多半是漏了 not。`)
+      }
+    }
+  }
+  // ③ L09：spend.item 落在一個恆假的條件下，不是一條真的消耗通道
+  for (const ev of events) {
+    for (const [i, ch] of (ev.choices ?? []).entries()) {
+      if (!ch.spend?.item) continue
+      const why = [ev.where, ev.when, ev.requires, ch.requires].map((c) => unsat(c, satEnv)).find(Boolean)
+      if (why) {
+        E(`event ${ev.id} choices[${i}] 的 spend.item（${ch.spend.item}）落在一個`
+          + `【結構上永遠為假】的條件下（${why}）—— 它不是一條真的消耗通道，`
+          + ` 而 ⑤ 會把它算成一條，於是那個消耗品實際上永不遞減。`)
+      }
+    }
+  }
+
   for (const e of edges) {
     if (e.knowledge !== 'learned') continue
     if (!taught.has(e.id)) {
@@ -607,31 +692,13 @@ for (const j of jobs) {
         + `理由請移到 YAML 註解：「${line.trim().slice(0, 60)}」`)
     }
   }
-  for (const e of events) {
-    scan(e.id, 'text', e.text); scan(e.id, 'tell', e.tell)
-    for (const c of e.choices ?? []) { scan(e.id, `choices[${c.label}].resultText`, c.resultText); scan(e.id, 'choice label', c.label) }
-  }
-  for (const e of endings) {
-    scan(e.id, 'text', e.text); scan(e.id, 'asks', e.asks)
-    scan(e.id, 'gaveUp', e.gaveUp); scan(e.id, 'tagline', e.tagline)
-  }
-  // ★ 節點描述與物品說明同樣是玩家看得到的（here.desc 就印在敘事區、it.desc 印在背包）。
-  //   第一版這道閘只查事件與結局，於是我立刻在新增的城區 desc 裡寫了「★ 治安一級」——
-  //   同一個錯誤，換一個欄位。閘門要涵蓋【全部】呈現給玩家的文字，否則它只是抓上一次的錯。
-  for (const n of nodes) scan(n.id, 'desc', n.desc)
-  for (const it of items) { scan(it.id, 'desc', it.desc); scan(it.id, 'name', it.name) }
-  for (const j of jobs) scan(j.id, 'tell', j.tell)
-  for (const n of npcs) { scan(n.id, 'desc', n.desc)
-    for (const [i, l] of (n.talkLines ?? []).entries()) scan(n.id, `talkLines[${i}]`, l) }
-
-  // ★★ 兩級的分野：敘事文字 vs 機制提示。
-  //
-  //   npc.effect 與 job.desc 是【機制提示】欄位——它們的工作就是告訴玩家
-  //   「這個關係會改變什麼」「這份工要付什麼」。它們用 ★ 當項目符號
-  //   （同局末摘要的「★ 里程碑」），那是強調而不是設計註記，所以不查 ★。
-  //
-  //   但它們仍然不得洩漏正典檔名、遊戲憲法術語，或以「遊戲」自稱——
-  //   那些在任何欄位都是洩漏。
+  /**
+   * 機制提示級的掃描：可用 ★ 當項目符號，但仍不得洩漏正典術語／檔名／以「遊戲」自稱。
+   *
+   * ★ 兩級的分野：npc.effect 與 job.desc 的工作【就是】告訴玩家
+   *   「這個關係會改變什麼」「這份工要付什麼」，它們用 ★ 當項目符號
+   *   （同局末摘要的「★ 里程碑」），那是強調而不是設計註記。
+   */
   const scanHint = (id, field, txt) => {
     if (typeof txt !== 'string') return
     for (const [needle, why] of MARK) {
@@ -641,8 +708,60 @@ for (const j of jobs) {
         + `但不得洩漏這個：「${line.trim().slice(0, 60)}」`)
     }
   }
-  for (const n of npcs) scanHint(n.id, 'effect', n.effect)
-  for (const j of jobs) scanHint(j.id, 'desc', j.desc)
+
+  /**
+   * ★★★ 白名單【反轉】：預設掃描全部字串葉欄位，只明列該跳過的。
+   *
+   * 手寫「要掃哪些欄位」這個形狀已經【週期性失效三次】：
+   *   ① 第一版只查事件與結局 → 我立刻在新增城區的 desc 裡寫了「★ 治安一級」
+   *   ② 補上節點／物品／工作／NPC → 而 choice.gain.npc.fact 還是漏的
+   *      （它經 reduce 寫進 knownFacts，UI 逐字印「你告訴過他：…」）
+   *   ③ 宣稱只豁免 event.name，實測 ending.name／job.name／npc.name 也全部沒查
+   *
+   * 所以改成【預設涵蓋】：下一個玩家可見欄位加進來時，閘門自動守它。
+   *
+   * ★ 關鍵洞察：掃到 id 欄位是【無害的】——id 是 ASCII slug，不會含 ★ 或正典術語。
+   *   所以真正必須跳過的只有一種東西：src（它本來就含 "canon:" 與 ".md"），
+   *   以及 event.name 的 ★★ 主線標記慣例。跳過清單因此短到可以逐一辯護。
+   */
+  const SKIP_PATHS = new Set([
+    // src 是出處標記，它的工作就是寫「canon:xxx.md」
+    'src', '_src',
+    // ★ 事件名會出現在死亡回溯的決策鏈裡，而「★★ 城衛查籍」是既有的、刻意的主線份量標記
+    'events[].name',
+  ])
+  /** 機制提示級（可用 ★ 當項目符號，但仍不得洩漏正典術語／檔名／以「遊戲」自稱） */
+  const HINT_PATHS = new Set([
+    'npcs[].effect',   // 「這個關係會改變什麼」
+    'jobs[].desc',     // 「這份工要付什麼、賺多少」
+    // knownFacts 的語域接近機制提示（UI 印「你告訴過他：…」），既有內容用 ★ 當符號
+    'events[].choices[].gain.npc.fact',
+  ])
+
+  /** 走訪一份資料集的全部字串葉，回傳 [正規化路徑, 值, 人看得懂的位置] */
+  function stringLeaves(dataset, setName) {
+    const out = []
+    const walk = (v, norm, human) => {
+      if (typeof v === 'string') { out.push([norm, v, human]); return }
+      if (Array.isArray(v)) { v.forEach((x, i) => walk(x, norm + '[]', human + '[' + i + ']')); return }
+      if (v && typeof v === 'object') {
+        for (const [k, x] of Object.entries(v)) walk(x, norm ? norm + '.' + k : k, human ? human + '.' + k : k)
+      }
+    }
+    for (const row of dataset) walk(row, setName + '[]', row.id ?? '(無 id)')
+    return out
+  }
+
+  const DATASETS = [['events', events], ['endings', endings], ['nodes', nodes],
+    ['items', items], ['jobs', jobs], ['npcs', npcs]]
+  for (const [setName, ds] of DATASETS) {
+    for (const [norm, val, human] of stringLeaves(ds, setName)) {
+      const leaf = norm.split('.').pop().replace('[]', '')
+      if (SKIP_PATHS.has(norm) || SKIP_PATHS.has(leaf)) continue
+      if (HINT_PATHS.has(norm)) scanHint(human, norm, val)
+      else scan(human, norm, val)
+    }
+  }
 }
 
 // ③ flag 雙向斷鏈：讀了沒人設 = 錯誤；設了沒人讀 = 警告

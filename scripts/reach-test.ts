@@ -57,6 +57,16 @@ const EXPECT: Record<string, NodeId[] | null> = {
   //   收口事件最容易寫死（條件一緊就永遠不觸發，而玩家不會知道自己漏了什麼），
   //   所以照樣登記一行讓它被機械驗收。
   'ev-dross-settle': ['bh:alley'], // 她落地的那面牆——「埋回原來的地方」只有在這裡成立
+  /**
+   * ★★ 三個教學事件。它們【一個都沒有被登記過】，而它們是 learned 邊唯一的來源——
+   *    教學事件寫死了，那條邊就在地圖上以虛線永久釣著玩家。
+   *    e:grotto-cathedral-cliffpath 真的發生過這件事（加邊當天沒有任何來源教它）。
+   */
+  // ★ 只在巷子那一端教。魚巷是「掛滿魚乾的竹架」，而那個場景屬於老鹽街那一頭；
+  //   碼頭那一端沒有對應的教學場景（登記時我先寫了兩端，測試立刻指出來）。
+  'ev-learn-fishlane': ['bh:alley'],
+  'ev-learn-grotto-stair': ['bh:grotto'],        // 石階藏在石窟街這頭的貨棚縫裡
+  'ev-learn-cliffpath': ['bh:grotto'],           // 推車從石窟街這頭出發上崖
 }
 
 const ALL_NODES = [...IDX.node.keys()]
@@ -75,6 +85,10 @@ function ideal(at: NodeId, hour: number, dropFlags: string[]): GameState {
   const flags: Record<string, boolean> = {
     'identity-obtained': true, 'path-token': true, 'saw-workshop': true,
     'bond-scribe-1': true, 'ladder-prentice-in': true, 'hollow-bench': true,
+    // ★ 手語。ev-learn-cliffpath 以它為門檻，而理想狀態漏了它 → 該事件被判「不可達」。
+    //   它在遊戲中拿得到（石窟街的手語事件），所以理想狀態本來就該有。
+    //   這是第二次同型的量尺缺件（第一次是漏帶那片殘滓）。
+    'bond-grotto-1': true,
     'dross-identified': true, 'saw-dross': true,
     // 三個目標旗標都給——ev-ch5-aim 的自我守衛（not any[aim-*]）會自動把它們拿掉，
     // 而 ev-lease-sign 需要 aim-hearth。
@@ -150,7 +164,18 @@ for (const [id, expect] of Object.entries(EXPECT)) {
 
 // 未登記的主線事件（★ 或 ev-ladder-/ev-named-/ev-give- 開頭者）必須在 EXPECT 裡有一行
 const shouldRegister = [...IDX.event.values()]
-  .filter((e) => /^ev-(ladder|named|give|ch4|ch5|lease|end)-/.test(e.id))
+  /**
+   * ★★ 這條 regex 是一個【以 id 命名為條件的覆蓋白名單】——
+   *    等於讓內容作者用取名決定自己要不要被驗收。
+   *    對抗式攻擊的 21 項裡，它出現 8 次當作「為什麼別的閘沒抓到」。
+   *
+   * 補上 learn 是因為三個 ev-learn-* 教學事件【一個都沒有登記】，
+   * 而它們是 learned 邊唯一的來源：教學事件寫死了，那條邊就永久釣著玩家。
+   *
+   * ★ 這只是止血。正解是「每一個事件都必須可達」，而那需要行為式的不動點閉包
+   *   （live-reach 的 R3），排在下一步。到那時這條 regex 就該整條刪掉。
+   */
+  .filter((e) => /^ev-(ladder|named|give|learn|ch4|ch5|lease|end)-/.test(e.id))
   .filter((e) => !(e.id in EXPECT))
 for (const e of shouldRegister) problems.push(`${e.id}：主線事件但未登記預期地點（在 EXPECT 加一行）`)
 

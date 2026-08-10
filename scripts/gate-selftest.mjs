@@ -1,0 +1,364 @@
+/**
+ * 閘門自測：對【每一道閘】注入一個真違規，斷言它會 exit 1。
+ *
+ * ══════════════════════════════════════════════════════════════════
+ * ★★★ 這份檔案存在的唯一理由，是一句被實證過的話：
+ *
+ *     「一道我沒見過它失敗的閘，等於一道我還沒驗證的閘。」
+ *
+ * 這不是格言，是本專案的病歷：
+ *   · ⑥ 的「結構上永遠為假」那一支從未執行過，而它【根本不會觸發】——
+ *     驗證器把自己註解裡的 ctxOf(s, idx, onEdge?, justTurned?) 當成一個
+ *     四參數呼叫點，整道檢查靜默失效。
+ *   · 修它的時候我只拿掉了 warns 分支、忘了把 exec 換成 anchor，
+ *     結果錨點失效變成【完全無聲】——比原本的警告版更糟。
+ *   · ⑧ 第一次跑就把動作名 `case 'buy':` 誤判成 service 的讀取端。
+ *   · ⑨ 第一次跑就讓一個鬼鍵通過（動態索引讓整個群組都算「有人讀」）。
+ *
+ * 四次都是【只有刻意注入違規才看得見】。而一次對抗式稽核在三道新閘上
+ * 找出 21 個漏洞、【全部是偽綠燈方向】，結論寫得很清楚：
+ *   「這三道反向閘之所以被穿透，就是因為沒有人對閘門本身寫回歸測試。」
+ *
+ * 所以那些臨時的反向測試不能停在對話裡。它們在這裡，跑在 npm run check 上。
+ * ══════════════════════════════════════════════════════════════════
+ *
+ * 做法：把 data/*.json（或 src 檔）暫時改壞 → 跑那道閘 → 斷言它 exit ≠ 0
+ * → 【一律還原】。每個案例都有 finally，且結束時驗證工作樹乾淨。
+ *
+ * ★ 為什麼改 data/ 而不改 content/：這裡測的是【閘門】而不是內容管線，
+ *   而 build-data --check 的漂移偵測是另一道獨立的閘（它自己也有案例）。
+ */
+
+import fs from 'node:fs'
+import path from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+
+const here = path.dirname(fileURLToPath(import.meta.url))
+const root = path.join(here, '..')
+const P = (rel) => path.join(root, rel)
+
+/** 跑一個腳本，回傳 exit code（不吃它的輸出） */
+function runGate(script) {
+  try {
+    execFileSync(process.execPath, [P(`scripts/${script}`)], { cwd: root, stdio: 'pipe' })
+    return 0
+  } catch (e) {
+    return e.status ?? 1
+  }
+}
+
+/** 讀 / 寫 JSON */
+const readJson = (rel) => JSON.parse(fs.readFileSync(P(rel), 'utf-8'))
+const writeJson = (rel, v) => fs.writeFileSync(P(rel), JSON.stringify(v, null, 2))
+
+const results = []
+const T = (gate, name, ok, note = '') => results.push({ gate, name, ok, note })
+
+/**
+ * 一個案例：暫時改壞 files 裡的每個檔，跑 gate，斷言非零，然後還原。
+ * @param mutate  (helpers) => void   —— 改壞
+ */
+function selfTest({ gate, name, script = 'validate-data.mjs', files, mutate }) {
+  const backups = new Map()
+  for (const f of files) backups.set(f, fs.readFileSync(P(f)))
+  try {
+    mutate({ readJson, writeJson, readText: (f) => fs.readFileSync(P(f), 'utf-8'),
+      writeText: (f, t) => fs.writeFileSync(P(f), t) })
+    const code = runGate(script)
+    T(gate, name, code !== 0, code !== 0 ? `exit ${code}` : '★ 閘門【放行】了這個違規')
+  } catch (err) {
+    T(gate, name, false, `自測本身出錯：${err.message}`)
+  } finally {
+    for (const [f, buf] of backups) fs.writeFileSync(P(f), buf)
+  }
+}
+
+/**
+ * ★ 開始前先記下工作樹的【基線】。
+ *   收尾時要比對的是「有沒有殘留」，而不是「工作樹是不是乾淨」——
+ *   開發中本來就會有未提交的改動，拿乾淨樹當標準會讓這一項恆紅。
+ *   （而恆紅的斷言跟恆真的斷言一樣沒有用。）
+ */
+const gitStatus = () => {
+  try { return execFileSync('git', ['status', '--short'], { cwd: root, encoding: 'utf-8' }).trim() }
+  catch { return null }
+}
+const baseline = gitStatus()
+
+// ── 先確認乾淨的 HEAD 是綠的（F-1：任何新閘上線第一件事）──
+{
+  const code = runGate('validate-data.mjs')
+  T('前置', '乾淨的工作樹必須通過 validate-data（否則以下每個案例都無意義）',
+    code === 0, code === 0 ? '' : `★ exit ${code} —— 先修這個`)
+}
+
+// ══════════════ ④ learned 邊必須有教學來源 ══════════════
+selfTest({
+  gate: '④', name: '一條 learned 邊沒有任何事件教它',
+  files: ['data/edges.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const d = readJson('data/edges.json')
+    d.find((e) => e.id === 'e:grotto-market-lane').knowledge = 'learned'
+    writeJson('data/edges.json', d)
+  },
+})
+selfTest({
+  gate: '④', name: '教學事件自我指涉（漏了 not，正向要求已經知道那條路）',
+  files: ['data/events.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const d = readJson('data/events.json')
+    d.find((e) => e.id === 'ev-learn-fishlane').requires = { knowsRoute: 'e:alley-quays-fishlane' }
+    writeJson('data/events.json', d)
+  },
+})
+selfTest({
+  gate: '④', name: '教學事件的閘門結構上恆假（day 超出局長度）',
+  files: ['data/events.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const d = readJson('data/events.json')
+    d.find((e) => e.id === 'ev-learn-fishlane').requires = { all: [{ day: '>=99' }] }
+    writeJson('data/events.json', d)
+  },
+})
+
+// ══════════════ ⑤ 宣告 uses 的消耗品必須有消耗路徑 ══════════════
+selfTest({
+  gate: '⑤', name: '一個沒有任何消耗路徑的物品宣告 uses',
+  files: ['data/items.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const d = readJson('data/items.json')
+    d.find((i) => i.id === 'item-local-clothes').uses = 5
+    writeJson('data/items.json', d)
+  },
+})
+selfTest({
+  gate: '⑤', name: '★ 把引擎的 removeItem 註解掉（最常見的「暫時停用」手法）',
+  files: ['src/engine/reduce.ts'],
+  mutate: ({ readText, writeText }) => {
+    const t = readText('src/engine/reduce.ts')
+    writeText('src/engine/reduce.ts',
+      t.replace("carry = removeItem(s, 'item-ash-salve')", "/* carry = removeItem(s, 'item-ash-salve') */ carry = carry"))
+  },
+})
+selfTest({
+  gate: '⑤', name: 'spend.item 落在一個恆假的條件下（不是真通道）',
+  files: ['data/events.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const d = readJson('data/events.json')
+    const ev = d.find((e) => (e.choices ?? []).some((c) => c.spend?.item === 'item-lighter'))
+    ev.requires = { all: [{ hours: [6, 7] }, { hours: [20, 21] }] }
+    writeJson('data/events.json', d)
+  },
+})
+
+// ══════════════ ⑥ 謂詞必須有實例且結構上可能為真 ══════════════
+selfTest({
+  gate: '⑥', name: '★ 用一個 Cond 沒宣告的謂詞（門禁會【整條消失】而非變成恆假）',
+  files: ['data/events.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const d = readJson('data/events.json')
+    d[0].requires = { all: [{ flagg: 'never-set' }] }
+    writeJson('data/events.json', d)
+  },
+})
+selfTest({
+  gate: '⑥', name: '★ 用 onEdge（結構上永遠為假：沒有呼叫點會填它）',
+  files: ['data/events.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const d = readJson('data/events.json')
+    d[0].requires = { all: [{ onEdge: 'e:alley-quays-fishlane' }] }
+    writeJson('data/events.json', d)
+  },
+})
+selfTest({
+  gate: '⑥', name: '★ 用 rep（只有讀取端，恆為「拿 0 去比」）',
+  files: ['data/events.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const d = readJson('data/events.json')
+    d[3].requires = { all: [{ rep: { faction: 'f-x', op: '>=', value: 10 } }] }
+    writeJson('data/events.json', d)
+  },
+})
+selfTest({
+  gate: '⑥', name: '★★ 把 Cond 介面改名（掃描錨點失效必須 error，不得靜默跳過）',
+  files: ['src/engine/types.ts'],
+  mutate: ({ readText, writeText }) => {
+    writeText('src/engine/types.ts',
+      readText('src/engine/types.ts').replace('export interface Cond {', 'export interface CondRenamed {'))
+  },
+})
+selfTest({
+  gate: '⑥', name: 'COND_KEYS 與型別 Cond 分歧（缺一個鍵）',
+  files: ['src/engine/cond.ts'],
+  mutate: ({ readText, writeText }) => {
+    // ★ 一律用容忍 \r?\n 的正則：這個 repo 在 Windows 上是 CRLF（git autocrlf），
+    //   而寫死 '\n' 的字面替換會【靜默不生效】——於是這個自測案例自己變成偽綠燈。
+    //   第一次跑就踩到了，而它剛好是「檢查閘門會不會誤放」的那個案例。
+    writeText('src/engine/cond.ts', readText('src/engine/cond.ts').replace(/\r?\n\s*'flag',/, ''))
+  },
+})
+selfTest({
+  gate: '⑥', name: '同行 JSDoc 讓一個新謂詞隱形（L16：不得靠縮排抓頂層鍵）',
+  files: ['src/engine/types.ts', 'src/engine/cond.ts'],
+  mutate: ({ readText, writeText }) => {
+    const t = readText('src/engine/types.ts').split('\n')
+    const i = t.findIndex((l) => l.trim() === 'flag?: string')
+    t.splice(i, 0, '  /** 出門前看天色 */ weather?: string')
+    writeText('src/engine/types.ts', t.join('\n'))
+  },
+})
+
+// ══════════════ ⑦ item 雙向斷鏈 ══════════════
+selfTest({
+  gate: '⑦', name: '條件讀一個【取得不到】的物品（死事件）',
+  files: ['data/events.json', 'data/nodes.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const n = readJson('data/nodes.json')
+    for (const x of n) x.sells = (x.sells ?? []).filter((i) => i !== 'item-holy-water')
+    writeJson('data/nodes.json', n)
+    const d = readJson('data/events.json')
+    d[8].requires = { all: [{ has: { item: 'item-holy-water' } }] }
+    writeJson('data/events.json', d)
+  },
+})
+
+// ══════════════ ⑧ services 詞彙表 ══════════════
+selfTest({
+  gate: '⑧', name: 'service 拼錯（設施的按鈕會靜默不 render）',
+  files: ['data/nodes.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const n = readJson('data/nodes.json')
+    n.find((x) => x.id === 'bh:market').services.push('sleep-romo')
+    writeJson('data/nodes.json', n)
+  },
+})
+
+// ══════════════ ⑨ conditions.json 雙向對應 ══════════════
+selfTest({
+  gate: '⑨', name: '★ 引擎會產生的鍵沒有對應文案（玩家會看到內部英文鍵）',
+  files: ['data/conditions.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const c = readJson('data/conditions.json')
+    delete c.sanity.rows.roughNight
+    writeJson('data/conditions.json', c)
+  },
+})
+selfTest({
+  gate: '⑨', name: '資料有文案但引擎不會產生那個鍵（死文案）',
+  files: ['data/conditions.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const c = readJson('data/conditions.json')
+    c.sanity.rows.zzzGhost = '沒有人會產生這個鍵'
+    writeJson('data/conditions.json', c)
+  },
+})
+
+// ══════════════ ②-bis 玩家可見欄位不得含設計註記 ══════════════
+selfTest({
+  gate: '②-bis', name: '★ 設計註記寫進 gain.npc.fact（白名單反轉前漏掉的欄位）',
+  files: ['data/events.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const d = readJson('data/events.json')
+    d[0].choices[0].gain = Object.assign({}, d[0].choices[0].gain,
+      { npc: { id: 'npc-quays-foreman', fact: '見 design/05_main_story.md 的支柱三樣板' } })
+    writeJson('data/events.json', d)
+  },
+})
+selfTest({
+  gate: '②-bis', name: '設計註記寫進 ending.name（宣稱只豁免 event.name）',
+  files: ['data/endings.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const d = readJson('data/endings.json')
+    d[0].name = '安家 ★ 見 canon/07'
+    writeJson('data/endings.json', d)
+  },
+})
+
+// ══════════════ 事件抽取權重 ══════════════
+selfTest({
+  gate: 'weight', name: 'weight: 0（恆不被抽中）',
+  files: ['data/events.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const d = readJson('data/events.json')
+    d[5].weight = 0
+    writeJson('data/events.json', d)
+  },
+})
+selfTest({
+  gate: 'weight', name: 'cooldownDays 大於局長度（「一局一次」的偽裝寫法）',
+  files: ['data/events.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const d = readJson('data/events.json')
+    d[5].cooldownDays = 400
+    writeJson('data/events.json', d)
+  },
+})
+
+// ══════════════ 路段值域與連通性 ══════════════
+selfTest({
+  gate: '值域', name: "requiresTide 拼錯（那條路段會【兩種潮汐都不通】)",
+  files: ['data/edges.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const d = readJson('data/edges.json')
+    d.find((e) => e.requiresTide).requiresTide = 'ebbing'
+    writeJson('data/edges.json', d)
+  },
+})
+selfTest({
+  gate: '連通', name: '一個節點只剩 learned 邊連著它（實際上永遠進不去）',
+  files: ['data/edges.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const d = readJson('data/edges.json')
+    for (const e of d) if (e.a === 'bh:cathedral' || e.b === 'bh:cathedral') e.knowledge = 'learned'
+    writeJson('data/edges.json', d)
+  },
+})
+
+// ══════════════ 內容漂移（build-data --check 是獨立的一道閘）══════════════
+{
+  const backup = fs.readFileSync(P('data/events.json'))
+  try {
+    const d = JSON.parse(backup.toString('utf-8'))
+    d[0].weight = d[0].weight + 1 // 只改 data，不改 content → 必須被漂移偵測抓到
+    writeJson('data/events.json', d)
+    let code = 0
+    try {
+      execFileSync(process.execPath, [P('scripts/build-data.mjs'), '--check'], { cwd: root, stdio: 'pipe' })
+    } catch (e) { code = e.status ?? 1 }
+    T('漂移', 'data/ 被直接改動（繞過 content/ 這個 SSOT）', code !== 0,
+      code !== 0 ? `exit ${code}` : '★ 漂移偵測【放行】了')
+  } finally {
+    fs.writeFileSync(P('data/events.json'), backup)
+  }
+}
+
+// ── 收尾：確認全部還原乾淨 ──
+{
+  const after = gitStatus()
+  if (baseline === null || after === null) {
+    T('收尾', '★ 全部注入都已還原', true, 'git 不可用，略過比對')
+  } else {
+    const base = new Set(baseline.split('\n').filter(Boolean))
+    const leaked = after.split('\n').filter(Boolean).filter((l) => !base.has(l))
+    T('收尾', '★ 全部注入都已還原（與開始前的基線逐行比對）',
+      leaked.length === 0,
+      leaked.length === 0 ? '' : `★ 殘留 ${leaked.length} 筆：${leaked.slice(0, 4).join(' / ')}`)
+  }
+}
+
+// ── 輸出 ──
+console.log('=== 無籍者 · 閘門自測（注入真違規 → 閘門必須 exit 1）===\n')
+let pass = true
+let lastGate = ''
+for (const r of results) {
+  if (!r.ok) pass = false
+  if (r.gate !== lastGate) { console.log(`  ── ${r.gate} ──`); lastGate = r.gate }
+  console.log(`  ${r.ok ? 'PASS' : 'FAIL'}  ${r.name}`)
+  if (r.note) console.log(`        ${r.note}`)
+}
+console.log(`\n${results.length} 個案例`)
+console.log(pass
+  ? '\n[PASS] 每一道閘都在注入違規時確實擋下。'
+  : '\n[FAIL] ★ 有閘門放行了真違規 —— 那道閘目前是裝飾品。')
+process.exit(pass ? 0 : 1)
