@@ -15,7 +15,7 @@
 
 import { readFileSync } from 'node:fs'
 import { buildIndex, type Content, type GameState } from '../src/engine/types.ts'
-import { tideAt } from '../src/engine/clock.ts'
+import { LAST_DAY, tideAt } from '../src/engine/clock.ts'
 import { isIncapacitated } from '../src/engine/body.ts'
 import { CLEAN, canUnwind, type CleanKind } from '../src/engine/mind.ts'
 import { affordable, offerRoutes } from '../src/engine/map.ts'
@@ -31,7 +31,6 @@ const IDX = buildIndex({
   conditions: load('conditions.json'),
 } as Content)
 
-const LAST_DAY = 14
 const N = Number(process.argv[2] ?? 300)
 
 /**

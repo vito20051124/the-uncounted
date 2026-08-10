@@ -40,6 +40,11 @@ TypeScript ＋ Preact ＋ Vite，**全離線、無 CDN**。目前是 P0.5 垂直
 
 ---
 
+## 授權
+
+**AGPL-3.0-or-later**。這是強 copyleft：衍生作品必須同樣以 AGPL 開源，
+而且**若你把修改版當成網路服務提供給別人使用，也必須提供原始碼**。
+
 ## 跑起來
 
 ```bash
@@ -50,7 +55,8 @@ npm run dev          # http://localhost:4174/
 Node ≥ 20（用到原生 TypeScript type-stripping 跑測試腳本）。
 
 ```bash
-npm run check        # 資料驗證 ＋ 型別 ＋ Pareto 判準 ＋ 30 項煙霧測試 ＋ 平衡跑分
+npm run build:data   # content/*.yaml → data/*.json
+npm run check        # 漂移偵測 ＋ 資料驗證 ＋ 型別 ＋ Pareto ＋ 單元 ＋ 煙霧 ＋ 存檔 ＋ 平衡跑分
 npm run balance      # 300 seed × 14 日，兩種政策對照
 ```
 
@@ -68,7 +74,9 @@ src/engine/     純 reducer，零 UI 依賴。(state, action) => state'
   events.ts       事件候選與加權抽選
   cond.ts         唯一的條件求值器
   rng.ts          無狀態 seeded RNG
-data/           純資料。46 事件、5 NPC、6 節點、14 路段、13 物品、3 工作
+content/        ★ 內容【來源】：YAML。多行散文用 block scalar，diff 讀得出改了哪一句
+data/           內容【產物】：由 content/ 生成並提交。
+                ★ 直接改它會被 npm run check 的漂移偵測抓到並指名行號
 design/         設計文件（等同遊戲側 canon）
 scripts/        建置期驗證與跑分
 ```

@@ -6,7 +6,7 @@
 
 import { readFileSync } from 'node:fs'
 import { buildIndex, type Content, type GameState } from '../src/engine/types.ts'
-import { tideAt } from '../src/engine/clock.ts'
+import { LAST_DAY, tideAt } from '../src/engine/clock.ts'
 import { affordable, offerRoutes } from '../src/engine/map.ts'
 import { availableChoices, drawEvent } from '../src/engine/events.ts'
 import {
@@ -17,7 +17,7 @@ import { needsHazard as needsHazardForTest } from '../src/engine/body.ts'
 import {
   DEPRIVATION_STAGES, newInjury as newInjuryForTest, quoteSuppuration as quoteSuppurationForTest,
 } from '../src/engine/body.ts'
-import { NEED_KEYS } from '../src/engine/clock.ts'
+import { LAST_DAY, NEED_KEYS } from '../src/engine/clock.ts'
 import { CLEAN, UNWIND_GAIN, canUnwind, fatigueMul } from '../src/engine/mind.ts'
 
 const D = new URL('../data/', import.meta.url)
@@ -27,7 +27,6 @@ const content: Content = {
   jobs: load('jobs.json'), events: load('events.json'), conditions: load('conditions.json'),
 }
 const IDX = buildIndex(content)
-const LAST_DAY = 14
 
 const results: Array<{ n: number; name: string; ok: boolean; note: string }> = []
 const T = (n: number, name: string, ok: boolean, note = '') => results.push({ n, name, ok, note })

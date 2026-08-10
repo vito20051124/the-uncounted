@@ -1,0 +1,102 @@
+- id: item-phone
+  name: 手機
+  priceCopper: null
+  uses: 40
+  weight: 1
+  modern: true
+  riskIfSeen: 0.35
+  desc: 電量只剩不到一半。它是一個會用完的光、一個唯一精確的時鐘，以及一些看一次就少一次的臉。靈血梯度對鋰電池毫無作用——這個世界沒有任何方法能把它充回去。
+  src: canon:canon/07_the_outsider.md#5.1
+- id: item-keys
+  name: 鑰匙
+  priceCopper: null
+  sellCopper: 26
+  weight: 1
+  modern: true
+  riskIfSeen: 0.05
+  desc: 現代精密切削的硬化鋼。作為鑰匙它打不開這裡任何一扇門——但它的鋼比這裡任何一把刀都好，而鐵匠識貨。
+  src: derived:canon-07 §5.1 外來之物不授予能力；售價由寂裔防靈血皮手套 25 銅之量級內插
+- id: item-candy
+  name: 糖果
+  priceCopper: null
+  sellCopper: 14
+  uses: 3
+  weight: 0
+  modern: true
+  riskIfSeen: 0.02
+  desc: 三顆。精製糖在這個世界是奢侈品，而包裝紙是此世造不出來的光滑材質。可以吃，可以賣，也可以送給一個從沒吃過這種東西的人。
+  src: derived:中世紀經濟中精製糖為奢侈品；售價參照海膽黃 4–6 銅/隻之奢侈食材量級上推
+- id: item-lighter
+  name: 打火機
+  priceCopper: null
+  uses: 30
+  weight: 0
+  modern: true
+  riskIfSeen: 0.25
+  desc: 無燧生火。取暖、煮沸飲水、照明、烹煮——它不解決任何戲劇性的問題，它只是讓你在冷夜裡不至於凍到生病、在黑暗裡看得見路。
+  src: canon:canon/07_the_outsider.md#5.1
+- id: item-spray
+  name: 防狼噴霧
+  priceCopper: null
+  uses: 10
+  weight: 0
+  modern: true
+  riskIfSeen: 0.2
+  desc: 約十次短噴。辣椒素在此世不存在，所以那個物質對所有人而言都是全新的。它能讓你打贏任何一個比你強的人——十次。第十一次開始，你只是一個沒有武器的人。
+  src: derived:canon-07 §5.1 不授予超凡能力；辣椒素原生作物不在此大陸
+- id: item-bandaid
+  name: OK 繃
+  priceCopper: null
+  uses: 10
+  weight: 0
+  modern: true
+  riskIfSeen: 0
+  desc: 一小盒無菌敷料。六樣裡最不起眼的一樣，也是最可能讓你活過第一個月的一樣——因為你永遠不能被治癒，而一道沒處理的傷口有三成四會化膿。
+  src: canon:world/catalogs/hollow-flora.md 化膿率 34%→21%；無菌敷料外插 8%
+- id: item-dross-shard
+  name: 一小片殘滓
+  priceCopper: null
+  weight: 0
+  modern: false
+  desc: |-
+    灰白色，指甲蓋大小，像鹽但不是鹽。摸起來不冷不熱，指尖碰到會有一種鈍感——像手指睡著了。
+    它出現在你出現的地方。
+  src: canon:canon-07 §3 誤觸發消耗靈血，於抵達點留下可測的殘滓沉積
+- id: item-rye-bread
+  name: 黑麥麵包（兩磅）
+  priceCopper: 1
+  weight: 1
+  desc: 全諸境的物價錨點：一枚銅幣，兩磅黑麥麵包。硬得要用水泡開。
+  src: canon:world/daily_life/_economy.md 銅幣典型購買力
+- id: item-fish-barley
+  name: 醃魚大麥飯
+  priceCopper: 3
+  weight: 0
+  desc: 鹽民下城平民餐館的一碗。鹹得發苦，但是熱的　熱的——吃完身上會暖一陣。
+  src: canon:brinehaven/districts.md#鹽民下城 平民餐館 3 銅
+- id: item-well-water
+  name: 一皮袋井水
+  priceCopper: 1
+  weight: 1
+  desc: 大市集公用分水井打的。生水——除非你有辦法煮沸它。
+  src: derived:_economy.md 下城井水取水費半銅；皮袋容量二人份計 1 銅
+- id: item-salve
+  name: 苦鹽苔藥膏
+  priceCopper: 1
+  uses: 1
+  weight: 0
+  desc: 鹽澤最便宜的傷口用藥，一劑一銅。洗淨傷口後敷上，能把化膿的機會從三成四壓到兩成一。
+  src: canon:world/catalogs/saltmarch-herbal.md 苦鹽苔成品藥膏 1 銅/劑
+- id: item-ash-salve
+  name: 私煉灰膏
+  priceCopper: 8
+  uses: 1
+  weight: 0
+  desc: 灰棚巷棚屋裡熬出來的。官方配給價八銅，這裡也是八銅——差別在於這一盒沒有人保證裡面是什麼。
+  src: canon:brinehaven/districts.md#灰棚巷 私煉灰膏一盒 8 銅
+- id: item-local-clothes
+  name: 一套本地舊衣
+  priceCopper: 22
+  weight: 2
+  desc: 粗麻布，肘部補過兩次。穿上它，你就不再是「一個穿著怪衣服的外地人」，而是「一個沒有人在數的人」——融入不是被接納，是不再被注意。
+  src: derived:粗麻布 14 銅（rites-without-magic.md）＋縫工

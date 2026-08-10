@@ -1,0 +1,109 @@
+- id: bh:alley
+  name: 老鹽街後巷
+  canonRef: district-lower-salters
+  elevation: 5
+  security: 3
+  services:
+    - sleep-rough
+    - food-cheap
+    - wash
+  desc: 鹽民下城的斜坡巷子。醃魚的酸味從牆縫裡滲出來，地上永遠是濕的。這裡沒有人會問你是誰——但也沒有人會在你不見時去找你。
+  src: canon:world/geography/saltmarch/brinehaven/districts.md#鹽民下城與老鹽街區
+  sells:
+    - item-rye-bread
+    - item-fish-barley
+    - item-well-water
+  buys: []
+  mapX: 38
+  privateHours:
+    - 20
+    - 6
+- id: bh:quays
+  name: 防潮石碼頭
+  canonRef: district-salt-quays
+  elevation: 2
+  security: 3
+  services:
+    - job-dayhire
+    - sleep-bunk
+    - drink
+    - rinse
+  desc: 浸水的木棧橋與防潮石砌。天沒亮就有人在這裡站成一排等監工挑人。潮水一天來回兩趟，把整座城的作息拖著走。
+  src: canon:world/geography/saltmarch/brinehaven/districts.md#鹽埠與防潮石碼頭區
+  sells:
+    - item-rye-bread
+    - item-well-water
+  buys: []
+  mapX: 16
+- id: bh:market
+  name: 行會大市集
+  canonRef: district-guild-market
+  elevation: 10
+  security: 2
+  services:
+    - buy
+    - sell
+    - job-errand
+    - sleep-room
+    - well
+  desc: 鹵港的幾何中心。鹽與香料的批發攤一路排到市政告示牆下，牆上釘著法令、稅率與通緝令。公用分水井在廣場東側，取水半銅。
+  src: canon:world/geography/saltmarch/brinehaven/districts.md#青野行會與大市集區
+  sells:
+    - item-rye-bread
+    - item-fish-barley
+    - item-well-water
+    - item-salve
+    - item-local-clothes
+  buys:
+    - item-candy
+  mapX: 54
+- id: bh:pans
+  name: 聖鹵蒸發池
+  canonRef: district-brine-pans
+  elevation: 2
+  security: 3
+  outsideWalls: true
+  services:
+    - job-rake
+    - rinse
+  desc: 城牆南側外圍的泥灘台地，三十二座蒸發池排到看不見的地方。進出要過潮汐門——而那道門只在退潮時開。
+  src: canon:world/geography/saltmarch/brinehaven/districts.md#聖鹵蒸發池區
+  sells: []
+  buys: []
+  mapX: 64
+- id: bh:cinder
+  name: 灰棚巷
+  canonRef: district-cinder-rows
+  elevation: 4
+  security: 4
+  services:
+    - buy-blackmarket
+    - food-cheapest
+    - sleep-rough
+  desc: 城牆東南角內側的窪地，鐵根木廢板與帆布搭出連綿數里的棚戶。領事衛隊極少深入這裡。八成五的住戶是灰裔——也就是說，這裡到處都是沒有人在數的人。
+  src: canon:world/geography/saltmarch/brinehaven/districts.md#灰棚巷外圍貧民窟
+  sells:
+    - item-rye-bread
+    - item-ash-salve
+    - item-well-water
+  buys:
+    - item-keys
+    - item-candy
+  mapX: 82
+- id: bh:grotto
+  name: 寂裔石窟街
+  canonRef: district-hollow-carvers
+  elevation: 12
+  security: 2
+  services:
+    - sell-metal
+    - craft
+  desc: 領事丘海崖下方的溶洞群。沒有人說話，只有鑿子敲石頭的聲音，以及偶爾一串手勢。全街八百人，五百個是寂裔——這是世上唯一一群身體構造跟你一樣的人。
+  src: canon:world/geography/saltmarch/brinehaven/districts.md#寂裔匠人巷與石窟街
+  sells: []
+  buys:
+    - item-keys
+  mapX: 22
+  privateHours:
+    - 0
+    - 24

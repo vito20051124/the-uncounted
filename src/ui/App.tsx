@@ -8,7 +8,7 @@ import { useMemo, useState } from 'preact/hooks'
 import {
   buildIndex, type Content, type GameState, type ItemId, type NodeId,
 } from '../engine/types.ts'
-import { clockLabel, tideAt, DECAY_PER_MIN } from '../engine/clock.ts'
+import { clockLabel, tideAt, DECAY_PER_MIN, LAST_DAY } from '../engine/clock.ts'
 import { evaluate } from '../engine/cond.ts'
 import { affordable, offerRoutes, type Route } from '../engine/map.ts'
 import { availableChoices, drawEvent } from '../engine/events.ts'
@@ -41,9 +41,7 @@ const content = {
 } as unknown as Content
 const IDX = buildIndex(content)
 
-// ★ 主線《名字》第三章的門檻在第 8 日之後才到得了（見 design/05_main_story.md）。
-// P0 的 6 日窗口只夠驗證生存迴圈；要驗證主線就必須容得下主線。
-const LAST_DAY = 14
+
 const NEEDS: Array<[keyof typeof DECAY_PER_MIN, string]> = [
   ['satiety', '飽食'], ['hydration', '水分'], ['stamina', '精力'],
   ['warmth', '體溫'], ['hygiene', '清潔'], ['sanity', '理智'],

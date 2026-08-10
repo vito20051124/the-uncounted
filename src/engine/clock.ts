@@ -16,6 +16,21 @@ import type { GameState, NeedKey, Tide } from './types.ts'
 
 export const MIN_PER_DAY = 1440
 
+/**
+ * 這一局有多長（遊戲日）。
+ *
+ * ★ 30 日的三個理由全部是 canon 的，不是挑的數字：
+ *   ① 銀月週期 30 日盈虧一輪，民間稱【一輪】（canon/01）——這是這個世界自己的整數單位
+ *   ② 老鹽街單間月租 60 銅，一輪＝租期正好到期一次，
+ *      於是「安家」的驗收可以寫成「這一輪已付、下一輪的租金已經在桌上」，
+ *      不需要任何新狀態、不需要 shelterStreak、不需要為它升 schemaVersion
+ *   ③ 旬＝10 日，第 10／20／30 日是三個對冊節拍，而第三次就是「平凡」結局本身
+ *
+ * ★ 它放在這裡是因為 LAST_DAY 原本在 App.tsx／smoke.ts／balance.ts 各寫一份 14——
+ *   而「同一個數字寫三份」正是本專案反覆修掉的缺陷類別。
+ */
+export const LAST_DAY = 30
+
 /** 鐘 N 鳴於 N×2 時（canon 統一換算律，BRIEF-057）。十二鐘 = 24:00。 */
 export function bellOf(minute: number): number {
   const h = Math.floor(minute / 60)
