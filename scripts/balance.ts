@@ -222,6 +222,11 @@ console.log(`結局清潔中位數   ${sloppyHyg.toFixed(0)}　（小心 ${caref
 //     若每一個活到第三十日的人【自動】滿足平凡，那平凡在機制上就等於
 //     「你活下來了」＝預設值＝那個 else 分支——而那正是 ending.ts 檔頭
 //     花整段篇幅要避免的違憲形狀。它必須明顯低於 100%，否則設計是假的。
+/** 不發工錢的節點，以及站在那裡的人（npcOffWage 實際上在數的東西） */
+const paidNodes = new Set([...IDX.job.values()].map((j) => j.at))
+const offWageNodes = new Set([...IDX.node.keys()].filter((n) => !paidNodes.has(n)))
+const offWageNpcs = [...IDX.npc.values()].filter((n) => offWageNodes.has(n.at))
+
 const roam = Array.from({ length: N }, (_, i) => play(`bal-${i}`, { careful: true, roam: true }))
 const roamAlive = roam.filter((s) => !s.dead)
 /** 假如她宣告了那一條，實質條件成不成立（★ 一律注入 aim flag——機器人不宣告目標） */
@@ -391,7 +396,15 @@ const checks: Array<[string, boolean, string]> = [
   //     垂直切片擴張會加節點與 NPC，這個數字會自己動；若它不動，那是真情報。
   ['★ 平凡達得到（不是假的門）', roamQuiet.pct > 0,
     `會走動組 ${roamQuiet.pct.toFixed(0)}%　※ 不設絕對下限——見程式註解。`
-    + `目前偏低的結構原因：全圖只有 1 個不發工錢的節點有人在（石窟街）`],
+    /**
+     * ★ 這一行的數字【自己算】，不寫死。
+     *   第一版寫「全圖只有 1 個不發工錢的節點有人在（石窟街）」，
+     *   而加了妲莎（老鹽街）之後就變成 2 個——那句話過期了，
+     *   卻印在測試輸出裡，看起來很權威。
+     *   跑分報告的每一個數字都該是量出來的，否則它就是另一種偽綠燈。
+     */
+    + `　可計入 npcOffWage 的人：${offWageNpcs.map((n) => n.name).join('、') || '（無）'}`
+    + `（共 ${offWageNpcs.length} 人，在 ${offWageNodes.size} 個不發工錢的節點）`],
   ['★★ 但平凡不是活下來就自動送：純領工資拿不到（≤60%）', wageQuiet.pct <= 60,
     `純領工資組 ${wageQuiet.pct.toFixed(0)}%——若接近 100% 則平凡退化成 else 分支，違反支柱一`],
   ['★ 而兩組必須明顯分離（差 ≥30 個百分點＝這條結局真的在問一件事）',

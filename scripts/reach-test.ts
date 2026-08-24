@@ -115,6 +115,11 @@ const EXPECT: Record<string, NodeId[] | null> = {
   'ev-cathedral-baptism': ['bh:cathedral'],
   'ev-cathedral-orphans': ['bh:cathedral'],
   'ev-cathedral-reading': ['bh:cathedral'],
+  // 聖鹵蒸發池（她整天在那裡扒鹽，而這一區原本只有 3 幕、常駐 1 幕）
+  'ev-pans-scale': ['bh:pans'],
+  'ev-pans-salt-hands': ['bh:pans'],
+  'ev-pans-backflow': ['bh:pans'],
+  'ev-pans-night-crystal': ['bh:pans'],
 }
 
 const ALL_NODES = [...IDX.node.keys()]
