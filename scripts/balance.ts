@@ -150,7 +150,26 @@ function play(seed: string, pol: Policy = { careful: true }): GameState {
     let target: string = rand(seed, 'flavor', steps) < 0.5 ? 'bh:quays' : 'bh:market'
     if (pol.roam) {
       const safe = s.needs.hydration > 55 && s.needs.satiety > 55 && s.needs.stamina > 55
-      const stranger = [...IDX.npc.values()].find((n) => (s.npcs[n.id]?.acquaintance ?? 0) < 30)
+      /**
+       * ★★★ 固著在【誰】身上，不可以是 npcs.yaml 的排列順序。
+       *
+       * 舊版直接 `.find()` 掃 IDX.npc.values()，於是每一局都從第一個人開始，
+       * 認完才換下一個——而老繩子排在第八個。政策要先把前七個都推到熟識 30
+       * 才輪得到他，可是妲莎卡在 7%、歐倫卡在 0%，所以【四百局裡一次都沒輪到】。
+       *
+       * 後果是一道閘量錯了東西：job-yards-ropewalk 的上工率 0.4% 被讀成
+       * 「這份工沒有人做得到」，而真正的原因是這把尺從來沒走到那一區。
+       * 量尺的遍歷順序不該是資料檔的行號。
+       *
+       * ★ 只改【挑誰】，不改【固著】本身——固著是對的行為，
+       *   先前把它改成隨機跳人時灰姐從 79% 掉到 17%，平凡從 38% 掉到 20%。
+       *   這裡每一局有自己固定的一份順序（由 seed 導出），局內依舊一個一個認完。
+       */
+      const order = [...IDX.npc.values()]
+        .map((n) => ({ n, k: rand(seed, 'flavor', 'who', n.id) }))
+        .sort((a, b) => a.k - b.k)
+        .map((x) => x.n)
+      const stranger = order.find((n) => (s.npcs[n.id]?.acquaintance ?? 0) < 30)
       /**
        * ★★ 除了「去見還不認得她的人」，也要「去還沒去過的地方」。
        *
@@ -307,6 +326,32 @@ const endShare = (aim: string, pool: GameState[]) => {
   return { pct: pool.length ? (ok.length / pool.length) * 100 : 0, n: ok.length }
 }
 const faces = (s: GameState) => Object.values(s.npcs).filter((n) => n.acquaintance >= 30).length
+/**
+ * ★★ 逐份工作的實際上工率 —— 一份沒有人做得到的工作是死內容。
+ *
+ * 這是反向驗證器家族在【行為層】的一員：
+ * 建置期的閘問「這份工的 id 指得到節點嗎」（抓拼錯），
+ * 這裡問「有沒有任何一種玩法真的走到它面前」（抓白寫）。
+ *
+ * ★ 為什麼非量不可：job-yards-ropewalk 的 requires 掛著
+ *   「老繩子熟識 ≥25」，而 tell 與 desc 都把這件事講得很清楚，
+ *   所以【宣告與程式是一致的】——既有的每一道閘都會放行。
+ *   但 roam 組四百局裡老繩子到得了熟識 30 的比例是 0%，
+ *   也就是說那份 12 銅的工可能從來沒有人上過。
+ *   宣告一致 ≠ 到得了，而只有跑分看得見後者。
+ *
+ * 統計的是【上工嘗試】而非錄取：碼頭挑人本來就會落選，
+ * 落選是設計；連站到隊伍前面的資格都沒有才是缺陷。
+ */
+const jobTakeRate = (pools: GameState[][]) => {
+  const total = pools.reduce((a, p) => a + p.length, 0)
+  return [...IDX.job.values()].map((j) => {
+    const n = pools.flat().filter((s) =>
+      Object.keys(s.stats.jobAttempts).some((k) => k.endsWith(`|${j.id}`))).length
+    return { job: j, n, pct: total ? (n / total) * 100 : 0 }
+  })
+}
+
 const perNpc = (pool: GameState[]) => [...IDX.npc.values()].map((n) => {
   const pct = pool.length ? (pool.filter((s) => (s.npcs[n.id]?.acquaintance ?? 0) >= 30).length / pool.length) * 100 : 0
   return `${n.name} ${pct.toFixed(0)}%`
@@ -326,6 +371,24 @@ console.log(`   └ 會走動組（四個城區都去，含兩個不發工錢的
 console.log(`       安家 ${endShare('aim-hearth', roamAlive).pct.toFixed(0)}%　立業 ${endShare('aim-trade', roamAlive).pct.toFixed(0)}%　平凡 ${roamQuiet.pct.toFixed(0)}%`)
 console.log(`       上工日數中位數 ${med(roamAlive.map((s) => s.stats.wageDays))}／需 18　　認得她的臉 ${med(roamAlive.map(faces))} 人／需 4`)
 console.log(`       逐人：${perNpc(roamAlive)}`)
+
+// ── 逐份工作：有沒有人做得到 ──
+const takes = jobTakeRate([alive, roamAlive, explore.filter((s) => !s.dead), roam.filter((s) => s.dead)])
+console.log(`
+── 逐份工作：四種玩法合計，有多少局【至少上過一次】──`)
+for (const t of takes) {
+  const note = t.job.requires ? JSON.stringify(t.job.requires).includes('npc') ? '（需有人認得她）' : '' : ''
+  console.log(`   ${t.job.id.padEnd(22)}${t.pct.toFixed(0).padStart(3)}%　${t.n} 局${note}`)
+}
+/**
+ * ★ 下限 5% 的來由（不是憑手感）：
+ *   全表最低的另一份是蒸發池扒鹽 17%，而那份是【刻意設計成最難的】——
+ *   它要退潮才過得了潮汐門，一天只有一個窗口。
+ *   把下限訂在 5%，等於「距離那份刻意最難的還有三倍餘裕」。
+ *   低於這個數的工作不是難，是玩家實際上碰不到。
+ */
+const JOB_FLOOR_PCT = 5
+const deadJobs = takes.filter((t) => t.pct < JOB_FLOOR_PCT)
 console.log(`   ★ 三種政策都【不追劇情線】，故安家（要租約事件）與立業（要被指名兩次）`)
 console.log(`     本就偏低，此處只作參考不設閘——它們的驗收在 reach-test。`)
 
@@ -474,6 +537,13 @@ const maxShare = Math.max(0, ...[...causes.values()].map((n) => n / Math.max(1, 
 const needDeaths = (causes.get('脫水') ?? 0) + (causes.get('飢餓') ?? 0)
 const bodyDeaths = (causes.get('敗血') ?? 0) + (sloppyCauses.get('敗血') ?? 0)
 const checks: Array<[string, boolean, string]> = [
+  [`★★ 每一份工作都真的有人做得到（實際上工率 ≥ ${JOB_FLOOR_PCT}%）`,
+    deadJobs.length === 0,
+    deadJobs.length
+      ? `${deadJobs.map((t) => `${t.job.id} ${t.pct.toFixed(1)}%`).join('、')}`
+        + ` —— 四種玩法合計都碰不到`
+        + ` —— 它的 requires 與 tell 彼此一致，所以建置期每一道閘都會放行，只有跑分看得見`
+      : `${takes.length} 份工作全部有人上過，最低 ${Math.min(...takes.map((t) => t.pct)).toFixed(0)}%`],
   ['會玩的人多半活得下來（死亡率 ≤ 40%）', deathRate <= 40, `${deathRate.toFixed(1)}%`],
   ['但死亡確實存在（≥ 5%）', deathRate >= 5, `${deathRate.toFixed(1)}%`],
   ['★ 粗心的人死得明顯更多（≥ 1.5 倍）', sloppyRate >= deathRate * 1.5,

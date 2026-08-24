@@ -122,6 +122,29 @@ const EXPECT: Record<string, NodeId[] | null> = {
   'ev-pans-night-crystal': ['bh:pans'],
   // 糖果那一幕：補一張遊戲在選物畫面就開出的空頭支票
   'ev-give-candy': ['bh:cinder', 'bh:alley'],
+
+  // ══ 後半局那一批：一半掛【狀態閘】而不是日期閘 ══
+  //
+  // 這一批補的是一個量出來的缺口：全庫原本【沒有任何事件掛在 wageDays 上】，
+  // 所以後段沒有「自然到位的第二批內容」——躺了十四天的人跟上了十四天工的人
+  // 會讀到一模一樣的東西。而後半段佔四成局長，正是玩家關掉視窗的位置。
+  //
+  // 同時補三個沒有戲的人：妲莎與修士歐倫原本【0 個事件提到他們】，
+  // 老繩子只有 3 個。而實測顯示關係是被事件推的，不是被「說話」按鈕推的
+  // （一局只按 4.4 次），所以 0 個事件 = 這個人在機制上不存在。
+  'ev-rope-scrap': ['bh:yards'],
+  'ev-rope-hand': ['bh:yards'],
+  'ev-dasha-line': ['bh:alley'],
+  'ev-dasha-absent': ['bh:alley'],
+  'ev-dasha-child': ['bh:alley'],
+  'ev-dasha-finds': ['bh:alley'],
+  'ev-orun-share': ['bh:cathedral'],
+  'ev-orun-roll': ['bh:cathedral'],
+  'ev-alms-grudge': ['bh:cathedral', 'bh:market'],
+  'ev-alms-roll-read': ['bh:market'],
+  // 這兩幕【沒有 where】：它們問的是身體與口袋，不是地點
+  'ev-wage-body': null,
+  'ev-purse-weight': null,
 }
 
 const ALL_NODES = [...IDX.node.keys()]
@@ -165,7 +188,50 @@ const IDEAL_DAY = 28
 const IDEAL_COPPER = 200
 
 /** 一個「該有的都有了」的狀態，用來測條件而不是測玩家能不能練到那裡 */
-function ideal(at: NodeId, hour: number, dropFlags: string[]): GameState {
+/**
+ * ★★★ 探針必須沿【事件自己問的那個軸】放鬆，不能一律「越多越好」。
+ *
+ * 這是本專案第四次撞到同一條原則。ideal() 原本的形狀是「最好命的玩家」：
+ * 錢 200、需求全 90、三軸全 90、旗標全開。而那對【要求缺乏的條件】完全反了——
+ *
+ *   · ev-orun-share  要 copper < 10  → 探針帶著 200 銅，永遠不成立
+ *   · ev-dasha-finds 要身上有沒處置的傷 → 探針身上一道傷都沒有
+ *   · ev-wage-body   要 wageDays >= 14 → 探針的 wageDays 是 0
+ *
+ * 三個都被報成「條件寫太緊，玩家永遠看不到它」，而三個都不是內容的錯，
+ * 是【量尺只有一個方向】。live-reach 當初靠 negatives() 修掉的是同一種漏洞，
+ * 只是換了一個檔案——所以這裡也照同一條紀律做：
+ *
+ *   單調軸（上工日數、給出去的次數、被指名的次數）→ 一律給滿
+ *   非單調軸（錢、傷）→ 只在【這個事件自己要求】的時候才調過去
+ *
+ * ★ 這不會製造偽綠燈：放鬆的方向永遠是事件自己寫出來的那一個，
+ *   跟 selfGuards 只拿掉事件自己否定的 flag 是同一個道理。
+ */
+function probeWants(ev: { requires?: unknown; where?: unknown; when?: unknown }) {
+  let poorBelow: number | null = null
+  let needInjury = false
+  const walk = (c: unknown) => {
+    if (!c || typeof c !== 'object') return
+    const o = c as Record<string, unknown>
+    if (typeof o.copper === 'string') {
+      const m = /^<=?\s*(\d+)$/.exec(o.copper)
+      if (m) {
+        const cap = o.copper.startsWith('<=') ? Number(m[1]) : Number(m[1]) - 1
+        poorBelow = poorBelow === null ? cap : Math.min(poorBelow, cap)
+      }
+    }
+    const inj = o.injury as Record<string, unknown> | undefined
+    if (inj && inj.untreated === true) needInjury = true
+    for (const k of ['all', 'any']) if (Array.isArray(o[k])) (o[k] as unknown[]).forEach(walk)
+    if (o.not) walk(o.not)
+  }
+  walk(ev.requires); walk(ev.where); walk(ev.when)
+  return { poorBelow, needInjury }
+}
+
+function ideal(at: NodeId, hour: number, dropFlags: string[],
+  wants: { poorBelow: number | null; needInjury: boolean } = { poorBelow: null, needInjury: false }): GameState {
   const s = initialState('reach', at, [], IDX)
   // 旗標與物品一律取自閉包，再扣掉這個事件【自己否定的】那些（selfGuards）
   const flags: Record<string, boolean> = {}
@@ -174,7 +240,13 @@ function ideal(at: NodeId, hour: number, dropFlags: string[]): GameState {
   const carry = CLOSURE.ownedItems.map((item) => ({ item: item as never, count: 9 }))
   return {
     ...s, at, carry, clock: { day: IDEAL_DAY, minute: hour * 60 }, flags,
-    purse: { copper: IDEAL_COPPER },
+    purse: { copper: wants.poorBelow === null ? IDEAL_COPPER : Math.max(0, wants.poorBelow) },
+    injuries: wants.needInjury
+      ? [{ id: 'probe', type: '擦傷', severity: 1, sinceDay: IDEAL_DAY - 3, treatedDay: null,
+        infected: false, feverSinceDay: null, stageDay: IDEAL_DAY - 3, healDay: null }]
+      : s.injuries,
+    // 單調軸：一律給滿。上工日數為 0 的探針會把每一個掛 wageDays 的事件都誤報成不可達。
+    stats: { ...s.stats, wageDays: IDEAL_DAY, namedAsks: 9, givenAway: 9 },
     needs: { satiety: 90, hydration: 90, stamina: 90, warmth: 90, hygiene: 90, sanity: 90 },
     npcs: Object.fromEntries([...IDX.npc.keys()].map((id) => [id,
       { acquaintance: 90, trust: 90, affection: 90, lastSeenDay: IDEAL_DAY - 1, knownFacts: [] }])),
@@ -203,10 +275,11 @@ function firesAt(id: string): NodeId[] {
   const ev = IDX.event.get(id)
   if (!ev) return []
   const drop = selfGuards(ev)
+  const wants = probeWants(ev)
   const hits: NodeId[] = []
   for (const at of ALL_NODES) {
     for (const h of HOURS) {
-      const s = ideal(at, h, drop)
+      const s = ideal(at, h, drop, wants)
       const ctx = ctxOf(s, IDX)
       if (evaluate(ev.where, ctx) && evaluate(ev.when, ctx) && evaluate(ev.requires, ctx)
         && candidates(s, IDX, ctx).some((e) => e.id === id)) { hits.push(at); break }

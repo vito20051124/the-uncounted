@@ -439,6 +439,53 @@ selfTest({
   },
 })
 
+selfTest({
+  gate: '平衡', name: '★★ 一份工作的門檻高到沒有人上得了（宣告與程式一致，只有跑分看得見）',
+  script: 'balance.ts', args: ['60'], files: ['data/jobs.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const d = readJson('data/jobs.json')
+    const j = d.find((x) => x.id === 'job-yards-ropewalk')
+    // 熟識上限是 100，>=100 幾乎不可能達到 —— 這正是它 0.4% 時的形狀
+    j.requires.all.find((c) => c.npc).npc.is = '>=100'
+    writeJson('data/jobs.json', d)
+  },
+})
+
+// ══════════════ reach-test 探針：放寬必須只沿事件自己問的那個軸 ══════════════
+//
+// probeWants() 讓探針在事件要求「缺」的時候跟著變窮／帶傷。
+// 這是把量尺放寬，所以必須證明它【沒有順手把真違規也放行】。
+selfTest({
+  gate: 'reach 探針', name: '★ 條件要求的錢是負數（探針變窮也不該讓它變成可達）',
+  script: 'reach-test.ts', files: ['data/events.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const d = readJson('data/events.json')
+    d.find((e) => e.id === 'ev-orun-share').requires.all.push({ copper: '<0' })
+    writeJson('data/events.json', d)
+  },
+})
+selfTest({
+  gate: 'reach 探針', name: '★ 上工日數要求超過局長度（單調軸給滿也不該蓋掉它）',
+  script: 'reach-test.ts', files: ['data/events.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const d = readJson('data/events.json')
+    d.find((e) => e.id === 'ev-wage-body').requires.all[0].wageDays = '>=999'
+    writeJson('data/events.json', d)
+  },
+})
+selfTest({
+  gate: 'reach 探針', name: '★ 要求身上有傷，但探針只在事件自己問的時候才給傷',
+  script: 'reach-test.ts', files: ['data/events.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const d = readJson('data/events.json')
+    // 把「要有沒處置的傷」換成一個【探針不會去湊】的不可能條件：
+    // 傷的嚴重度上限是 3，要求 minAgeDays 超過局長度即永不成立。
+    d.find((e) => e.id === 'ev-dasha-finds').requires.all
+      .find((c) => c.injury).injury.minAgeDays = 99
+    writeJson('data/events.json', d)
+  },
+})
+
 // ══════════════ 內容漂移（build-data --check 是獨立的一道閘）══════════════
 {
   const backup = fs.readFileSync(P('data/events.json'))
