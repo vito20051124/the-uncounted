@@ -10,7 +10,6 @@ import {
   buildIndex, type Content, type GameState, type ItemId, type NodeId,
 } from '../engine/types.ts'
 import { clockLabel, tideAt, DECAY_PER_MIN, LAST_DAY } from '../engine/clock.ts'
-import { evaluate } from '../engine/cond.ts'
 import { affordable, offerRoutes, type Route } from '../engine/map.ts'
 import { availableChoices, drawEvent, eventText } from '../engine/events.ts'
 import {
@@ -20,7 +19,7 @@ import {
 import { CLEAN, UNWIND_GAIN, bandOf, canUnwind, cleanBlocked, fatigueMul, type CleanKind } from '../engine/mind.ts'
 import {
   attemptKey, attemptsLeft, canTalk, ctxOf, initialState, quoteHireChance, quoteMinutes,
-  reduce, type Action,
+  reduce, workBlock, workBlockText, type Action,
 } from '../engine/reduce.ts'
 import { resolveEnding } from '../engine/ending.ts'
 import { MapView } from './MapView.tsx'
@@ -550,7 +549,11 @@ export function App() {
                   <div class="choices one-col">
                     {jobsHere.map((j) => {
                       const left = attemptsLeft(s, j)
-                      const ok = !feverish && left > 0 && evaluate(j.requires, ctx) && evaluate({ hours: j.when }, ctx)
+                      // ★ 能不能上工、以及【擋住的是哪一條】，一律問引擎。
+                      //   舊版在這裡自己重算一次，於是 requires 擋住時顯示的理由是
+                      //   「現在不行（6:00–19:00）」——一句在早上十點明顯為假的話。
+                      const blocked = workBlock(s, j, IDX)
+                      const ok = blocked === null
                       return (
                         <button class="choice" disabled={!ok} onClick={() => apply({ t: 'work', job: j.id })}>
                           {j.name}
@@ -563,11 +566,7 @@ export function App() {
                               ? `錄取 ${Math.round(quoteHireChance(s, j) * 100)}%${j.hireModBy === 'hygiene' ? `（清潔 ${Math.round(s.needs.hygiene)}）` : ''}`
                               : '保證錄取'}
                             {j.maxPerDay > 1 && left > 0 && `　今天還剩 ${left} 趟`}
-                            {feverish
-                              ? <span class="no">　—— 你在發燒，今天上不了工</span>
-                              : left <= 0
-                              ? <span class="no">　—— 今天的工已經挑完了，明天請早</span>
-                              : !ok && <span class="no">　—— 現在不行（{j.when[0]}:00–{j.when[1]}:00）</span>}
+                            {blocked && <span class="no">　—— {workBlockText(j, blocked)}</span>}
                           </span>
                           <span class="choice-tell">{j.tell}</span>
                         </button>

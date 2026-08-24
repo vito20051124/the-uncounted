@@ -20,7 +20,7 @@ import {
 import { riskFor, staminaFor } from './map.ts'
 import { roll } from './rng.ts'
 import { SAVE_VERSION } from './save.ts'
-import { must, type EdgeId, type GameState, type Index, type ItemId, type JobId, type NeedKey, type NodeId, type NpcDef, type NpcId } from './types.ts'
+import { must, type EdgeId, type GameState, type Index, type ItemId, type JobDef, type JobId, type NeedKey, type NodeId, type NpcDef, type NpcId } from './types.ts'
 
 export type Action =
   | { t: 'travel'; route: EdgeId[]; alternatives: string[] }
@@ -128,6 +128,51 @@ export function attemptKey(day: number, jobId: string): string {
 /** 這份工今天還剩幾次可以【嘗試】（含落選）。UI 用它決定按鈕能不能按。 */
 export function attemptsLeft(s: GameState, job: { id: string; maxPerDay: number }): number {
   return job.maxPerDay - (s.stats.jobAttempts[attemptKey(s.clock.day, job.id)] ?? 0)
+}
+
+/**
+ * ★★★ 此刻能不能上這份工 —— 【唯一】的判斷，附帶「擋住的是哪一條」。
+ *
+ * 為什麼要有這個函式，而不是各處各寫一份：
+ *
+ *   這一條判斷原本有【三份實作】。reducer 一份（下方 case 'work'）、
+ *   App.tsx 一份（`const ok = !feverish && left > 0 && evaluate(...)`），
+ *   而跑分腳本用的是第三種近似：`attemptsLeft(s, j) > 0`。
+ *
+ *   attemptsLeft 這個名字沒有錯，它只數今天試了幾次；錯的是呼叫端
+ *   把它當成「這份工現在做得了」。於是跑分政策會挑上 job-cinder-drill
+ *   （requires: 旗標 ladder-prentice-in），reducer 拒絕、不花時間，
+ *   政策下一步再挑同一份——【無窮迴圈】。balance.ts 的 step() 有一道
+ *   防死鎖會補一個 wait 30，所以它不會當掉，只會靜默地把時間燒掉，
+ *   而沒有任何一道閘看得見。
+ *
+ *   ★ 而玩家看得見的那一半更糟：App.tsx 在 requires 擋住時，
+ *     顯示的理由是「現在不行（6:00–19:00）」——一句在早上十點
+ *     明顯為假的話。介面知道不能點，卻不知道為什麼。
+ *
+ * 這與本專案已修掉的四個 blocker 是同一個形狀（job.when、treat/herbs、
+ * buy/sell、事件候選判斷）：每條路徑單獨看都對，錯在它們之間。
+ * 故此處回傳【擋住的原因】而不是布林——理由與判斷同源，就不可能再分歧。
+ */
+export type WorkBlock = 'fever' | 'hours' | 'requires' | 'used-up' | null
+
+/** 擋住的理由怎麼講給玩家聽。與 workBlock 同源，故不可能出現「理由是假的」。 */
+export function workBlockText(job: JobDef, b: Exclude<WorkBlock, null>): string {
+  switch (b) {
+    case 'fever': return '你在發燒。手抬不起來，站著都在晃——今天上不了工。'
+    case 'hours': return `${job.name}現在不招人（${job.when[0]}:00–${job.when[1]}:00）。`
+    case 'requires': return `${job.name}不是你現在做得了的——他們要先認得你。`
+    case 'used-up': return `${job.name}今天已經沒有你的份了。明天請早。`
+  }
+}
+
+export function workBlock(s: GameState, job: JobDef, idx: Index): WorkBlock {
+  if (isIncapacitated(s)) return 'fever'
+  const c = ctxOf(s, idx)
+  if (!evaluate({ hours: job.when }, c)) return 'hours'
+  if (!evaluate(job.requires, c)) return 'requires'
+  if (attemptsLeft(s, job) <= 0) return 'used-up'
+  return null
 }
 
 /**
@@ -498,32 +543,13 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
 
     case 'work': {
       const job = must(idx.job, a.job, '工作')
-      const c = ctxOf(s, idx)
-      // ★ 接線 isIncapacitated。感染的主要後果是【斷了收入】，不是骰死亡——
-      //   這才是 00_pillars.md 憲法範例鏈的字面意思：不是骰子殺了你，是貧窮殺了你。
-      //   舊版 DayProgress.incapacitated 自始存在卻從未被讀取，是死碼。
-      if (isIncapacitated(s)) {
-        log.push('你在發燒。手抬不起來，站著都在晃——今天上不了工。')
-        break
-      }
-      // ★★ 時段必須由【reducer 自己】守。
-      //   單元測試抓到：這個檢查原本只存在於 App.tsx，reducer 完全不看 job.when——
-      //   碼頭挑人窗口是 05:00–08:00，而 reducer 會接受凌晨三點上工，只有介面在擋。
-      //   這與本專案已修掉的三個 blocker 是同一個模式（兩條路徑分歧，
-      //   每條單獨看都對，錯在它們之間）。reducer 必須守住自己的前置條件——
-      //   跑分腳本、存讀檔、未來的介面改動都不該有機會繞過它。
-      if (!evaluate({ hours: job.when }, c)) {
-        log.push(`${job.name}現在不招人（${job.when[0]}:00–${job.when[1]}:00）。`)
-        break
-      }
-      if (!evaluate(job.requires, c)) {
-        log.push('你今天做不了這個。')
-        break
-      }
-      // ★ 一天只挑一次人。落選也算用掉一次——否則 60% 錄取率會被「原地重試」磨平，
-      //   而正典的「一年只有 80–160 天有工可做」這條推導就白寫了。
-      if (attemptsLeft(s, job) <= 0) {
-        log.push(`${job.name}今天已經沒有你的份了。明天請早。`)
+      // ★ 前置條件全部走 workBlock —— reducer、介面、跑分共用同一份判斷。
+      //   （reducer 必須守住自己的前置條件：跑分腳本、存讀檔、未來的介面改動
+      //   都不該有機會繞過它。isIncapacitated 那一條接的是 00_pillars 的
+      //   憲法範例鏈——感染的主要後果是【斷了收入】，不是骰死亡。）
+      const blocked = workBlock(s, job, idx)
+      if (blocked) {
+        log.push(workBlockText(job, blocked))
         break
       }
       const akey = attemptKey(s.clock.day, job.id)

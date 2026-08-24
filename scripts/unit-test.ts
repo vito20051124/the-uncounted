@@ -27,7 +27,8 @@ import { DEPRIVATION_STAGES, quoteSuppuration, needsHazard } from '../src/engine
 import { staminaFor } from '../src/engine/map.ts'
 import { CLEAN, HOT_MEAL_WARMTH, SHELTER, fatigueMul } from '../src/engine/mind.ts'
 import {
-  attemptsLeft, canTalk, initialState, quoteHireChance, quoteMinutes, reduce, type Action,
+  attemptKey, attemptsLeft, canTalk, initialState, quoteHireChance, quoteMinutes, reduce,
+  workBlock, type Action,
 } from '../src/engine/reduce.ts'
 import { rand } from '../src/engine/rng.ts'
 import { eventText } from '../src/engine/events.ts'
@@ -700,6 +701,142 @@ function testVariantsReachable() {
         + `，每一則在真實時空裡都抽得到；同一天同一地點至少變得出三種；無重複；抽選為純函數`)
 }
 testVariantsReachable()
+
+/**
+ * ⑬ ★★★ reducer 接受一份工，若且唯若 workBlock 說沒擋。
+ *
+ * 這一項守的是【一個判斷只能有一份實作】，而它的由來是一個真的踩到的缺陷：
+ *
+ *   「這份工現在做得了嗎」原本有三份答案。reducer 一份、App.tsx 一份、
+ *   跑分腳本用 `attemptsLeft(s, j) > 0` 當第三種近似——而 attemptsLeft
+ *   只數今天試了幾次，不看 job.requires。
+ *
+ *   於是跑分政策會挑上 job-cinder-drill（要旗標 ladder-prentice-in），
+ *   reducer 拒絕且【不花時間】，政策下一步再挑同一份，無窮迴圈。
+ *   balance.ts 的 step() 有防死鎖會補 wait 30，所以它不會當掉，
+ *   只會靜默地把時間燒掉——一局實際只跑到第 2 日，而沒有任何一道閘看得見。
+ *
+ *   而玩家看得見的那一半：介面在 requires 擋住時顯示「現在不行（6:00–19:00）」，
+ *   一句在早上十點明顯為假的話。
+ *
+ * 所以這裡不測「某個情境下應該拒絕」——那只會證明每條路徑符合它自己的預期。
+ * 測的是【兩條路徑的位元一致性】：對隨機狀態，reducer 的實際行為
+ * 必須與 workBlock 的宣告完全同號。
+ */
+function testWorkBlockAgreement() {
+  const problems: string[] = []
+  const jobs = [...IDX.job.values()]
+  let checked = 0
+  for (let i = 0; i < 4000 && problems.length < 5; i++) {
+    const job = jobs[i % jobs.length]!
+    const seed = `wb-${i}`
+    const at = job.at
+    let s: GameState = initialState(seed, at, ['item-bandaid'], IDX)
+    // 隨機時空與狀態：時段、旗標、疲勞、當日已試次數，四個軸都要掃到
+    const hour = Math.floor(rand(seed, 'flavor', 'h') * 24)
+    const day = 1 + Math.floor(rand(seed, 'flavor', 'd') * LAST_DAY)
+    const flags: Record<string, boolean> = {}
+    if (rand(seed, 'flavor', 'f') < 0.5) flags['ladder-prentice-in'] = true
+    const used = rand(seed, 'flavor', 'u') < 0.35 ? job.maxPerDay : 0
+    s = {
+      ...s, at, clock: { day, minute: hour * 60 }, flags,
+      npcs: Object.fromEntries([...IDX.npc.keys()].map((id) => [id, {
+        acquaintance: rand(seed, 'flavor', 'a', id) * 100, trust: 50, affection: 50,
+        lastSeenDay: null, knownFacts: [],
+      }])),
+      stats: { ...s.stats, jobAttempts: { [attemptKey(day, job.id)]: used } },
+    }
+    const declared = workBlock(s, job, IDX) === null
+    const before = s.stats.jobAttempts[attemptKey(day, job.id)] ?? 0
+    const after = reduce(s, { t: 'work', job: job.id }, IDX).s
+    const actual = (after.stats.jobAttempts[attemptKey(day, job.id)] ?? 0) > before
+    checked++
+    if (declared !== actual) {
+      problems.push(`${job.id} 在第 ${day} 日 ${hour}:00：`
+        + `workBlock 說「${declared ? '可以' : '擋住'}」，而 reducer 實際「${actual ? '受理了' : '拒絕了'}」`
+        + ` —— 兩條路徑分歧，而分歧的那一半沒有人在看`)
+    }
+  }
+  /**
+   * ★★ 第二半：這一份共用實作【自己】對不對。
+   *
+   * 上半段問的是「兩條路徑一不一致」，而那需要一個共同參照——
+   * 於是它拿 workBlock 當標準答案。統一之後這變成一個自我指涉的問題：
+   * workBlock 少看一條，reducer 也跟著少看一條，兩邊照樣完全一致。
+   * （這是閘門自測注入時實際撞出來的：反方向的注入【沒有被擋下】。）
+   *
+   * 所以第二半必須用【另一把尺】：完全不提 workBlock，
+   * 只用資料（job.when、job.requires）與可觀察量（時間有沒有走）來陳述。
+   * 兩個相反的問題各用一把能回答它的尺——本專案第五次套用這條規矩。
+   */
+  const advanced = (s0: GameState, jid: string) => {
+    const t0 = s0.clock.day * 1440 + s0.clock.minute
+    const s1 = reduce(s0, { t: 'work', job: jid }, IDX).s
+    return s1.clock.day * 1440 + s1.clock.minute !== t0
+  }
+  for (const job of jobs) {
+    const base: GameState = {
+      ...initialState(`win-${job.id}`, job.at, [], IDX),
+      clock: { day: 5, minute: 0 },
+      flags: { 'ladder-prentice-in': true },
+      knownRoutes: [...IDX.edge.keys()],
+      purse: { copper: 50 },
+      npcs: Object.fromEntries([...IDX.npc.keys()].map((id) => [id,
+        { acquaintance: 100, trust: 100, affection: 100, lastSeenDay: null, knownFacts: [] }])),
+    }
+    // (a) 時段之外一律不得受理 —— 掃過全部 24 個整點
+    for (let h = 0; h < 24; h++) {
+      const inside = h >= job.when[0] && h < job.when[1]
+      if (inside) continue
+      const s0 = { ...base, clock: { day: 5, minute: h * 60 } }
+      if (advanced(s0, job.id)) {
+        problems.push(`${job.id} 的時段是 ${job.when[0]}:00–${job.when[1]}:00，`
+          + `而 reducer 在 ${h}:00 受理了 —— 時段守衛不見了`)
+      }
+    }
+    /**
+     * (b) requires 不成立時一律不得受理。
+     *
+     * ★ 只挑條件裡真的有【旗標】或【關係門檻】的工作，並依那個門檻構造狀態——
+     *   這樣「條件為假」是從資料的形狀直接讀出來的，不必去問求值器，
+     *   於是這一半不會繞回 workBlock。
+     *   （第一版對每一份工都清空 flags 就斷言，結果誤告三份：
+     *   碼頭／鹽池／跑腿的條件是體力與已知路線，清 flags 根本不影響它們。）
+     */
+    const gates = { flags: [] as string[], npcAxes: false }
+    const scan = (c: unknown) => {
+      if (!c || typeof c !== 'object') return
+      const o = c as Record<string, unknown>
+      if (typeof o.flag === 'string') gates.flags.push(o.flag)
+      if (o.npc) gates.npcAxes = true
+      for (const k of ['all', 'any']) if (Array.isArray(o[k])) (o[k] as unknown[]).forEach(scan)
+      if (o.not) scan(o.not)
+    }
+    scan(job.requires)
+    if (gates.flags.length > 0 || gates.npcAxes) {
+      for (let h = job.when[0]; h < job.when[1]; h++) {
+        const s0: GameState = { ...base, clock: { day: 5, minute: h * 60 }, flags: {},
+          npcs: Object.fromEntries([...IDX.npc.keys()].map((id) => [id,
+            { acquaintance: 0, trust: 0, affection: 0, lastSeenDay: null, knownFacts: [] }])) }
+        if (advanced(s0, job.id)) {
+          problems.push(`${job.id} 要的是`
+            + `${gates.flags.length ? `旗標 ${gates.flags.join('／')}` : ''}`
+            + `${gates.flags.length && gates.npcAxes ? '與' : ''}`
+            + `${gates.npcAxes ? '有人認得她' : ''}`
+            + `，而兩者都不成立時 reducer 在 ${h}:00 仍受理了 —— requires 守衛不見了`)
+          break
+        }
+      }
+    }
+  }
+
+  T(13, '★★★ reducer 接受一份工，若且唯若 workBlock 說沒擋；而那份判斷本身也對',
+    problems.length === 0,
+    problems.length ? problems.join('；')
+      : `${checked} 組隨機時空×狀態兩條路徑完全同號；`
+        + `另以資料獨立驗證 ${jobs.length} 份工的時段與 requires 守衛都還在`)
+}
+testWorkBlockAgreement()
 
 // ── 輸出 ──
 console.log('=== 無籍者 · 單元／性質測試 ===\n')

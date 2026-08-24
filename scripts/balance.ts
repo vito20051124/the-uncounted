@@ -21,7 +21,7 @@ import { CLEAN, canUnwind, type CleanKind } from '../src/engine/mind.ts'
 import { evaluate } from '../src/engine/cond.ts'
 import { affordable, offerRoutes } from '../src/engine/map.ts'
 import { availableChoices, drawEvent } from '../src/engine/events.ts'
-import { attemptsLeft, canTalk, ctxOf, initialState, reduce, type Action } from '../src/engine/reduce.ts'
+import { canTalk, ctxOf, initialState, reduce, workBlock, type Action } from '../src/engine/reduce.ts'
 import { rand } from '../src/engine/rng.ts'
 
 const D = new URL('../data/', import.meta.url)
@@ -136,12 +136,20 @@ function play(seed: string, pol: Policy = { careful: true }): GameState {
     }
     const who = [...IDX.npc.values()].find((n) => canTalk(s, n))
     if (who && rand(seed, 'flavor', steps) < (pol.roam ? 0.75 : 0.3)) { step({ t: 'talk', npc: who.id }); continue }
-    if (!isIncapacitated(s)) {
-      const job = [...IDX.job.values()].find(
-        (j) => j.at === s.at && h >= j.when[0] && h < j.when[1] && s.needs.stamina > 35 && attemptsLeft(s, j) > 0
-      )
-      if (job) { step({ t: 'work', job: job.id }); continue }
-    }
+    /**
+     * ★ 挑工必須問【引擎的那一份判斷】，不能自己湊條件。
+     *
+     * 舊版寫 `attemptsLeft(s, j) > 0`，而 attemptsLeft 只數今天試了幾次、
+     * 不看 job.requires。於是政策會挑上 job-cinder-drill（要旗標
+     * ladder-prentice-in），reducer 拒絕且不花時間，下一步再挑同一份——
+     * 無窮迴圈。上面 step() 的防死鎖會補一個 wait 30，所以它不會當掉，
+     * 只會【靜默地把時間燒掉】，而沒有任何一道閘看得見。
+     * stamina > 35 留著，那是政策的取捨（引擎不管累不累）。
+     */
+    const job = [...IDX.job.values()].find(
+      (j) => j.at === s.at && s.needs.stamina > 35 && workBlock(s, j, IDX) === null
+    )
+    if (job) { step({ t: 'work', job: job.id }); continue }
     // ★ 會走動的政策必須是【一個合理的玩家】，不是隨機遊走者。
     //   第一版寫成「每一步從四區隨機挑一個」，結果死亡率 65%、收入從 295 銅崩到 68——
     //   因為它整天在爬 +12m 的崖梯，從來沒待在一個地方把工做完。

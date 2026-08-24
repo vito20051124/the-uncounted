@@ -486,6 +486,33 @@ selfTest({
   },
 })
 
+// ══════════════ ⑬ 上工判斷只能有一份實作 ══════════════
+selfTest({
+  gate: '⑬', name: '★★ 讓 reducer 繞過 requires（就是修掉之前的那個形狀）',
+  script: 'unit-test.ts',
+  files: ['src/engine/reduce.ts'],
+  mutate: ({ readText, writeText }) => {
+    const t = readText('src/engine/reduce.ts')
+    const from = "  if (!evaluate(job.requires, c)) return 'requires'"
+    if (!t.includes(from)) throw new Error('注入錨點失效：workBlock 的 requires 分支找不到')
+    // workBlock 仍然宣告「擋住」，但 reducer 那一側等於沒看——兩條路徑分歧
+    writeText('src/engine/reduce.ts', t.replace(
+      "      const blocked = workBlock(s, job, idx)",
+      "      const blocked = evaluate(job.requires, ctxOf(s, idx)) ? workBlock(s, job, idx) : null"))
+  },
+})
+selfTest({
+  gate: '⑬', name: '★ workBlock 少看一條（時段），reducer 照舊 —— 反方向的分歧',
+  script: 'unit-test.ts',
+  files: ['src/engine/reduce.ts'],
+  mutate: ({ readText, writeText }) => {
+    const t = readText('src/engine/reduce.ts')
+    const from = "  if (!evaluate({ hours: job.when }, c)) return 'hours'"
+    if (!t.includes(from)) throw new Error('注入錨點失效：workBlock 的時段分支找不到')
+    writeText('src/engine/reduce.ts', t.replace(from, "  // (injected) " + from.trim()))
+  },
+})
+
 // ══════════════ 內容漂移（build-data --check 是獨立的一道閘）══════════════
 {
   const backup = fs.readFileSync(P('data/events.json'))
