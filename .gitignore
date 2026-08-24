@@ -15,3 +15,4 @@ Thumbs.db
 # 流水線工作區的暫存輸出（briefs/reviews 是設計記錄，會追蹤；日誌不追蹤）
 _generation/outbox/*.log
 _generation/outbox/*.err
+_build/

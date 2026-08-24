@@ -33,7 +33,36 @@ const content: Content = {
 const idx = buildIndex(content)
 const ids = content.nodes.map((n) => n.id)
 
-/** 全知狀態：learned 邊全部已知，圖最完整 */
+/**
+ * 已知路線的兩種讀法。
+ *
+ * ★★ 舊版只有「全知」一種：knownRoutes = 全部 learned 邊。
+ *   於是這支腳本【結構上不可能】發現「這條路玩家其實學不到」——
+ *   它會把一條不可得的邊算進 Pareto 最優集，然後宣告路線選擇是真決策。
+ *
+ *   實測傷害（對抗式稽核）：石窟街→大聖堂在全知下的最優解是
+ *   14 分的「崖上崖下小徑」，而那條邊曾經【沒有任何事件教它】。
+ *   玩家實際只能走 29 分的緘默長廊——路線分析對那組 OD 給出的最優解
+ *   快了一倍，而玩家永遠拿不到。
+ *
+ * ★ 現在跑兩遍：
+ *     全知 = 設計意圖（這張圖【應該】提供什麼選擇）
+ *     實得 = live-reach 的不動點閉包（玩家【真的】拿得到什麼）
+ *   而【判準必須在實得那一遍通過】。兩遍差太多就是一個獨立的警訊：
+ *   你的路線設計依賴玩家拿不到的邊。
+ */
+const ALL_LEARNED = content.edges.filter((e) => e.knowledge === 'learned').map((e) => e.id)
+const CLOSURE = (() => {
+  try {
+    const j = JSON.parse(readFileSync(new URL('../_build/reach-closure.json', import.meta.url), 'utf-8'))
+    return j.knownRoutes as string[]
+  } catch {
+    return null
+  }
+})()
+/** 目前這一遍用哪一組 learned 邊 */
+let KNOWN: string[] = ALL_LEARNED
+
 function stateAt(from: NodeId, minute: number, stamina = 100): GameState {
   const s = initialState('acceptance', from, [])
   return {
@@ -41,7 +70,7 @@ function stateAt(from: NodeId, minute: number, stamina = 100): GameState {
     at: from,
     clock: { day: 3, minute },
     needs: { ...s.needs, stamina },
-    knownRoutes: content.edges.filter((e) => e.knowledge === 'learned').map((e) => e.id),
+    knownRoutes: KNOWN,
   }
 }
 
@@ -62,54 +91,89 @@ function frontSize(from: NodeId, to: NodeId, minute: number, enc = 0): number {
   return paretoFront(enumerateRoutes(s, idx, tideAt(minute), to, enc)).length
 }
 
-const pairs: Array<[NodeId, NodeId]> = []
-for (const a of ids) for (const b of ids) if (a !== b) pairs.push([a, b])
+function measure() {
+  const pairs: Array<[NodeId, NodeId]> = []
+  for (const a of ids) for (const b of ids) if (a !== b) pairs.push([a, b])
 
-let multi = 0
-let variesByWorld = 0
-let variesByLoad = 0
-const rows: string[] = []
+  let multi = 0
+  let variesByWorld = 0
+  let variesByLoad = 0
+  const rows: string[] = []
 
-for (const [a, b] of pairs) {
-  const base = frontSize(a, b, 14 * 60)
-  if (base >= 2) multi++
+  for (const [a, b] of pairs) {
+    const base = frontSize(a, b, 14 * 60)
+    if (base >= 2) multi++
 
-  const keys = new Set(SCENARIOS.map((sc) => frontKey(a, b, sc.minute, 0)))
-  const worldVaries = keys.size > 1
-  if (worldVaries) variesByWorld++
+    const keys = new Set(SCENARIOS.map((sc) => frontKey(a, b, sc.minute, 0)))
+    const worldVaries = keys.size > 1
+    if (worldVaries) variesByWorld++
 
-  // ③ 體力可行性：精神飽滿 vs 扛完一天鹽之後
-  const affordableSet = (stam: number, enc: number) => {
-    const s = stateAt(a, 14 * 60, stam)
-    return paretoFront(enumerateRoutes(s, idx, tideAt(14 * 60), b, enc))
-      .filter((r) => affordable(r, stam))
-      .map((r) => r.edges.join('>'))
-      .sort()
-      .join(' | ')
+    // ③ 體力可行性：精神飽滿 vs 扛完一天鹽之後
+    const affordableSet = (stam: number, enc: number) => {
+      const s = stateAt(a, 14 * 60, stam)
+      return paretoFront(enumerateRoutes(s, idx, tideAt(14 * 60), b, enc))
+        .filter((r) => affordable(r, stam))
+        .map((r) => r.edges.join('>'))
+        .sort()
+        .join(' | ')
+    }
+    const loadVaries = affordableSet(100, 0) !== affordableSet(28, 2)
+    if (loadVaries) variesByLoad++
+
+    const an = idx.node.get(a)!.name
+    const bn = idx.node.get(b)!.name
+    rows.push(
+      `  ${an} → ${bn}`.padEnd(30) +
+        `front ${base}` +
+        (worldVaries ? '  [日夜/潮汐會變]' : '') +
+        (loadVaries ? '  [負重會變]' : '')
+    )
   }
-  const loadVaries = affordableSet(100, 0) !== affordableSet(28, 2)
-  if (loadVaries) variesByLoad++
 
-  const an = idx.node.get(a)!.name
-  const bn = idx.node.get(b)!.name
-  rows.push(
-    `  ${an} → ${bn}`.padEnd(30) +
-      `front ${base}` +
-      (worldVaries ? '  [日夜/潮汐會變]' : '') +
-      (loadVaries ? '  [負重會變]' : '')
-  )
+
+  return { multi, variesByWorld, variesByLoad, rows }
 }
 
 console.log('=== Pareto 路線列舉驗收 ===')
-console.log(`OD 對：${pairs.length} 組（6 節點）\n`)
-rows.forEach((r) => console.log(r))
+console.log(`OD 對：${ids.length * (ids.length - 1)} 組（${ids.length} 節點）`)
 
+// 第一遍：全知（設計意圖）
+KNOWN = ALL_LEARNED
+const omniscient = measure()
+
+// 第二遍：實得（live-reach 的閉包）
+let actual = omniscient
+if (CLOSURE === null) {
+  console.log('\n★ 找不到 _build/reach-closure.json —— 只跑得了「全知」那一遍。')
+  console.log('  請先跑 npm run live-reach（npm run check 的順序已經把它排在前面）。')
+  console.log('  ★ 在那之前這道閘【無法】發現「路線設計依賴玩家拿不到的邊」。')
+} else {
+  KNOWN = CLOSURE
+  actual = measure()
+}
+
+console.log('')
+actual.rows.forEach((r) => console.log(r))
+
+if (CLOSURE !== null) {
+  const missing = ALL_LEARNED.filter((e) => !CLOSURE.includes(e))
+  console.log('\n--- 兩遍對照 ---')
+  console.log(`  全知：多解 ${omniscient.multi}／潮汐變 ${omniscient.variesByWorld}／負重變 ${omniscient.variesByLoad}`)
+  console.log(`  實得：多解 ${actual.multi}／潮汐變 ${actual.variesByWorld}／負重變 ${actual.variesByLoad}`
+    + `　（learned 邊 ${CLOSURE.length}/${ALL_LEARNED.length} 學得到）`)
+  if (missing.length > 0) {
+    console.log(`  ★ 有 ${missing.length} 條 learned 邊玩家學不到：${missing.join('、')}`)
+    console.log('    —— 判準以【實得】那一遍為準，因為玩家玩到的是那一張圖。')
+  }
+}
+
+// ★ 判準一律以【實得】那一遍為準
 const checks = [
-  { name: '≥12 組有 ≥2 條 Pareto 最優路徑', got: multi, need: 12 },
-  { name: '≥4 組因日夜/潮汐改變 front', got: variesByWorld, need: 4 },
-  { name: '≥2 組的可行路線因體力而改變', got: variesByLoad, need: 2 },
+  { name: '≥12 組有 ≥2 條 Pareto 最優路徑', got: actual.multi, need: 12 },
+  { name: '≥4 組因日夜/潮汐改變 front', got: actual.variesByWorld, need: 4 },
+  { name: '≥2 組的可行路線因體力而改變', got: actual.variesByLoad, need: 2 },
 ]
-console.log('\n--- 判準 ---')
+console.log('\n--- 判準（以實際學得到的邊計算）---')
 let pass = true
 for (const c of checks) {
   const ok = c.got >= c.need
@@ -117,7 +181,7 @@ for (const c of checks) {
   console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${c.name}：實測 ${c.got} / 需 ${c.need}`)
 }
 
-// 抽樣展示一組真決策
+// 抽樣展示一組真決策（用實得的圖）
 const demo = stateAt('bh:alley', 14 * 60)
 const front = paretoFront(enumerateRoutes(demo, idx, 'ebb', 'bh:market', 0))
 console.log('\n--- 範例：老鹽街後巷 → 行會大市集（日·退潮）---')

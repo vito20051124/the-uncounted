@@ -315,6 +315,74 @@ selfTest({
   },
 })
 
+// ══════════════ live-reach：靜態分析【原理上】抓不到的五種形狀 ══════════════
+//
+// ★ 這五個案例是對抗式稽核裡「靜態閘全部放行」的那幾種。它們的共同點是
+//   問題不在任何單一資料列，而在整張圖的連通性——所以逐案補規則永遠補不完，
+//   只有行為式的不動點閉包抓得到。
+const LR = 'live-reach.ts'
+selfTest({
+  gate: 'live-reach', name: '★ 地理雞生蛋：教 X 的事件在一個必須先走 X 才到得了的節點',
+  script: LR, files: ['data/events.json', 'data/edges.json'],
+  mutate: ({ readJson, writeJson }) => {
+    // 讓大聖堂只能經崖上崖下小徑（learned）進入，而教那條路的事件搬到大聖堂
+    const ed = readJson('data/edges.json')
+    for (const e of ed) {
+      if (e.id === 'e:market-cathedral-steps') e.knowledge = 'learned'
+    }
+    writeJson('data/edges.json', ed)
+    const ev = readJson('data/events.json')
+    ev.find((x) => x.id === 'ev-learn-cliffpath').where = { at: 'bh:cathedral' }
+    writeJson('data/events.json', ev)
+  },
+})
+selfTest({
+  gate: 'live-reach', name: '★ 兩條 learned 邊互鎖（A 教 B、B 教 A，兩條都學不到）',
+  script: LR, files: ['data/events.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const ev = readJson('data/events.json')
+    // 魚巷的教學事件改成要先知道石階；石階的教學事件改成要先知道魚巷
+    ev.find((x) => x.id === 'ev-learn-fishlane').requires = {
+      all: [{ knowsRoute: 'e:quays-grotto-stair' }, { not: { knowsRoute: 'e:alley-quays-fishlane' } }],
+    }
+    ev.find((x) => x.id === 'ev-learn-grotto-stair').requires = {
+      all: [{ knowsRoute: 'e:alley-quays-fishlane' }, { not: { knowsRoute: 'e:quays-grotto-stair' } }],
+    }
+    writeJson('data/events.json', ev)
+  },
+})
+selfTest({
+  gate: 'live-reach', name: '★ 事件的條件在物理上不可能（npc 三軸上限是 100）',
+  script: LR, files: ['data/events.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const ev = readJson('data/events.json')
+    ev[10].requires = { npc: { id: 'npc-quays-foreman', axis: 'trust', is: '>=200' } }
+    writeJson('data/events.json', ev)
+  },
+})
+selfTest({
+  gate: 'live-reach', name: '★ 一個選項的 requires 在任何狀態下都不成立',
+  script: LR, files: ['data/events.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const ev = readJson('data/events.json')
+    ev[12].choices[0].requires = { npcCount: { axis: 'trust', is: '>=99', atLeast: 99 } }
+    writeJson('data/events.json', ev)
+  },
+})
+selfTest({
+  gate: 'live-reach', name: '★ 一個物品在任何地方都取得不到（不賣、無 gain、非開場物）',
+  script: LR, files: ['data/nodes.json'],
+  mutate: ({ readJson, writeJson }) => {
+    // ★ 必須挑一個【只靠販售】取得的物品。
+    //   第一版挑了 item-local-clothes，而它有 gain.item 兜著（里程碑事件會給），
+    //   於是把它從 sells 移除【不是】一個違規——閘門放行是正確的。
+    //   私煉灰膏只在灰棚巷賣、沒有任何 gain.item，才是這個案例要的形狀。
+    const n = readJson('data/nodes.json')
+    for (const x of n) x.sells = (x.sells ?? []).filter((i) => i !== 'item-ash-salve')
+    writeJson('data/nodes.json', n)
+  },
+})
+
 // ══════════════ 內容漂移（build-data --check 是獨立的一道閘）══════════════
 {
   const backup = fs.readFileSync(P('data/events.json'))

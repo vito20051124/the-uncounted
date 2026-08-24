@@ -67,40 +67,100 @@ const EXPECT: Record<string, NodeId[] | null> = {
   'ev-learn-fishlane': ['bh:alley'],
   'ev-learn-grotto-stair': ['bh:grotto'],        // 石階藏在石窟街這頭的貨棚縫裡
   'ev-learn-cliffpath': ['bh:grotto'],           // 推車從石窟街這頭出發上崖
+
+  /**
+   * ★★ 以下 22 個是把強制登記的判準【從命名改成結構】之後補進來的。
+   *
+   * 舊判準是一條 regex（`^ev-(ladder|named|give|learn|ch4|ch5|lease|end)-`），
+   * 等於讓內容作者用取名決定自己要不要被驗收——對抗式稽核的 21 項裡，
+   * 它出現 8 次當作「為什麼別的閘沒抓到」。
+   *
+   * 新判準是可推導的：一個事件若【設了某個別的事件或結局會讀的旗標】，
+   * 或【教一條 learned 邊】，它就是主線——因為它的位置會影響進程。
+   * 實測：結構上 39 個主線事件，而舊 regex 只圈到 19 個。
+   *
+   * ★ 這裡的地點取自各事件【自己宣告的 where.at】，不是從測試結果反推。
+   *   斷言因此是「它只在它宣告的地方觸發，不在別處」，
+   *   而日後有人放寬某個 where 時，這張表會逼他明確更新一行。
+   */
+  'ev-buy-local-clothes': ['bh:market'],
+  'ev-night-alley-followed': ['bh:alley', 'bh:cinder'],
+  'ev-cinder-ledger': ['bh:cinder'],
+  'ev-dross-trace': ['bh:alley'],
+  'ev-dross-asked': ['bh:cinder'],
+  'ev-census-notice': ['bh:market'],
+  'ev-dross-appraise-grotto': ['bh:grotto'],
+  'ev-dross-buyer': ['bh:cinder'],
+  'ev-guard-census': ['bh:market', 'bh:quays'],
+  'ev-path-token': ['bh:quays'],
+  'ev-path-forge': ['bh:cinder'],
+  'ev-path-vouch': ['bh:grotto'],
+  'ev-scribe-letters': ['bh:market'],
+  'ev-scribe-choice': ['bh:market'],
+  'ev-hand-ticket': ['bh:quays'],
+  'ev-hand-choice': ['bh:quays'],
+  'ev-foreman-fingers': ['bh:quays'],
+  'ev-cinder-child': ['bh:cinder'],
+  'ev-grotto-handsign': ['bh:grotto'],
+  'ev-pans-shard': ['bh:pans'],
+  'ev-grotto-workshop': ['bh:grotto'],
+  'ev-cathedral-curfew': ['bh:cathedral'],
 }
 
 const ALL_NODES = [...IDX.node.keys()]
-const HOURS = [6, 8, 11, 14, 18, 21]
+/**
+ * ★ 時刻表要涵蓋跨午夜的時窗。
+ *   舊版最晚只到 21 點，於是 `when: { hours: [22, 4] }` 的事件
+ *   （身後的腳步聲）在任何時刻都不成立，被誤報成「條件寫太緊」。
+ *   與 live-reach 用同一組代表時刻。
+ */
+const HOURS = [0, 3, 5, 6, 7, 8, 10, 12, 14, 16, 18, 20, 21, 22, 23]
+
+/**
+ * ★★★ 理想狀態的旗標與物品【由 live-reach 的不動點閉包導出】，不再手寫。
+ *
+ * 這是第四次修同一種缺陷：手寫的 god-state 漏一個旗標，
+ * 一個好內容就被誤報成「玩家永遠看不到它」。
+ * 前三次分別漏了那片殘滓、bond-grotto-1，這一次一口氣漏了
+ * census-passed／census-fled／dross-lead／bond-hand-1／on-cinder-ledger。
+ *
+ * 手寫清單這個形狀已經證明會週期性腐爛——就跟那條以命名為條件的 regex 一樣。
+ * 而 live-reach 的閉包本來就是「玩家拿得到的全部旗標與物品」，
+ * 它是【推導出來的】而且會自己跟著內容長大。
+ *
+ * ★ 缺檔一律報錯而不是靜默退回手寫清單：
+ *   一道靜默退化的檢查比沒有檢查更貴（anchor 那一課）。
+ */
+const CLOSURE = (() => {
+  try {
+    return JSON.parse(readFileSync(new URL('../_build/reach-closure.json', import.meta.url), 'utf-8')) as {
+      flags: string[]; ownedItems: string[]
+    }
+  } catch {
+    console.error('★ 找不到 _build/reach-closure.json —— 請先跑 npm run live-reach。')
+    console.error('  這份可達性測試的理想狀態由那份閉包導出，缺了它就無法進行'
+      + '（刻意不退回手寫清單：手寫清單漏旗標已經誤報過四次）。')
+    process.exit(1)
+  }
+})()
 /** ★ 理想狀態的日子要晚到足以涵蓋第五章（day>=24），錢要夠付租約（60 銅） */
 const IDEAL_DAY = 28
 const IDEAL_COPPER = 200
 
 /** 一個「該有的都有了」的狀態，用來測條件而不是測玩家能不能練到那裡 */
 function ideal(at: NodeId, hour: number, dropFlags: string[]): GameState {
-  // ★ 那片滓要帶著：ev-dross-settle 要 has(item-dross-shard)。
-  //   拒賣一路帶到第 28 日在遊戲中完全達得到（ev-dross-buyer 的「說不賣」分支），
-  //   所以理想狀態本來就該有它——第一版漏了它，於是收口事件被判「不可達」。
-  const s = initialState('reach', at, ['item-bandaid', 'item-salve', 'item-fish-barley'], IDX)
-  const carry = [...s.carry, { item: 'item-dross-shard' as const, n: 1 }]
-  const flags: Record<string, boolean> = {
-    'identity-obtained': true, 'path-token': true, 'saw-workshop': true,
-    'bond-scribe-1': true, 'ladder-prentice-in': true, 'hollow-bench': true,
-    // ★ 手語。ev-learn-cliffpath 以它為門檻，而理想狀態漏了它 → 該事件被判「不可達」。
-    //   它在遊戲中拿得到（石窟街的手語事件），所以理想狀態本來就該有。
-    //   這是第二次同型的量尺缺件（第一次是漏帶那片殘滓）。
-    'bond-grotto-1': true,
-    'dross-identified': true, 'saw-dross': true,
-    // 三個目標旗標都給——ev-ch5-aim 的自我守衛（not any[aim-*]）會自動把它們拿掉，
-    // 而 ev-lease-sign 需要 aim-hearth。
-    'aim-hearth': true, 'aim-trade': true, 'aim-quiet': true,
-  }
+  const s = initialState('reach', at, [], IDX)
+  // 旗標與物品一律取自閉包，再扣掉這個事件【自己否定的】那些（selfGuards）
+  const flags: Record<string, boolean> = {}
+  for (const f of CLOSURE.flags) flags[f] = true
   for (const f of dropFlags) delete flags[f]
+  const carry = CLOSURE.ownedItems.map((item) => ({ item: item as never, count: 9 }))
   return {
     ...s, at, carry, clock: { day: IDEAL_DAY, minute: hour * 60 }, flags,
     purse: { copper: IDEAL_COPPER },
-    needs: { ...s.needs, stamina: 90 },
+    needs: { satiety: 90, hydration: 90, stamina: 90, warmth: 90, hygiene: 90, sanity: 90 },
     npcs: Object.fromEntries([...IDX.npc.keys()].map((id) => [id,
-      { acquaintance: 60, trust: 60, affection: 60, lastSeenDay: IDEAL_DAY - 1, knownFacts: [] }])),
+      { acquaintance: 90, trust: 90, affection: 90, lastSeenDay: IDEAL_DAY - 1, knownFacts: [] }])),
   }
 }
 
@@ -163,19 +223,50 @@ for (const [id, expect] of Object.entries(EXPECT)) {
 }
 
 // 未登記的主線事件（★ 或 ev-ladder-/ev-named-/ev-give- 開頭者）必須在 EXPECT 裡有一行
+/**
+ * ★★★ 強制登記的判準：從【命名】改成【結構】。
+ *
+ * 舊版是一條 regex（`^ev-(ladder|named|give|learn|ch4|ch5|lease|end)-`），
+ * 而那是一個以 id 命名為條件的覆蓋白名單——等於讓內容作者用取名
+ * 決定自己要不要被驗收。對抗式稽核的 21 項裡它出現 8 次當作
+ * 「為什麼別的閘沒抓到」，是全份報告裡最常被引用的那一個漏洞。
+ *
+ * 新判準可推導、不能靠取名規避：
+ *   ① 它教一條 learned 邊（那條邊的存廢全靠它）
+ *   ② 它設的旗標【被別的事件或結局讀取】（也就是它影響進程）
+ * 只是氛圍紋理的事件（設的旗標沒人讀、或根本不設旗標）不需要登記。
+ *
+ * ★ 「每一個事件都至少進得了候選池」現在由 live-reach 的 R3 全面守著，
+ *   所以這裡專責的是另一件事：【它有沒有在不該發生的地方發生】。
+ *   兩者互補——R3 問可達性，EXPECT 問位置正確性。
+ */
+const flagReaders = (() => {
+  const read = new Set<string>()
+  const walk = (c: unknown) => {
+    if (!c || typeof c !== 'object') return
+    const o = c as Record<string, unknown>
+    if (typeof o.flag === 'string') read.add(o.flag)
+    for (const k of ['all', 'any']) {
+      if (Array.isArray(o[k])) (o[k] as unknown[]).forEach(walk)
+    }
+    if (o.not) walk(o.not)
+  }
+  for (const e of IDX.event.values()) {
+    walk(e.where); walk(e.when); walk(e.requires)
+    for (const c of e.choices) walk(c.requires)
+  }
+  for (const e of IDX.ending.values()) walk(e.requires)
+  return read
+})()
+const isMainline = (e: { choices: Array<{ gain?: { learnRoute?: string; flag?: string | string[] } }> }) => {
+  for (const c of e.choices) {
+    if (c.gain?.learnRoute) return true
+    for (const f of [c.gain?.flag ?? []].flat()) if (flagReaders.has(f as string)) return true
+  }
+  return false
+}
 const shouldRegister = [...IDX.event.values()]
-  /**
-   * ★★ 這條 regex 是一個【以 id 命名為條件的覆蓋白名單】——
-   *    等於讓內容作者用取名決定自己要不要被驗收。
-   *    對抗式攻擊的 21 項裡，它出現 8 次當作「為什麼別的閘沒抓到」。
-   *
-   * 補上 learn 是因為三個 ev-learn-* 教學事件【一個都沒有登記】，
-   * 而它們是 learned 邊唯一的來源：教學事件寫死了，那條邊就永久釣著玩家。
-   *
-   * ★ 這只是止血。正解是「每一個事件都必須可達」，而那需要行為式的不動點閉包
-   *   （live-reach 的 R3），排在下一步。到那時這條 regex 就該整條刪掉。
-   */
-  .filter((e) => /^ev-(ladder|named|give|learn|ch4|ch5|lease|end)-/.test(e.id))
+  .filter((e) => isMainline(e))
   .filter((e) => !(e.id in EXPECT))
 for (const e of shouldRegister) problems.push(`${e.id}：主線事件但未登記預期地點（在 EXPECT 加一行）`)
 
