@@ -120,6 +120,8 @@ const EXPECT: Record<string, NodeId[] | null> = {
   'ev-pans-salt-hands': ['bh:pans'],
   'ev-pans-backflow': ['bh:pans'],
   'ev-pans-night-crystal': ['bh:pans'],
+  // 糖果那一幕：補一張遊戲在選物畫面就開出的空頭支票
+  'ev-give-candy': ['bh:cinder', 'bh:alley'],
 }
 
 const ALL_NODES = [...IDX.node.keys()]

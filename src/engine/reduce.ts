@@ -797,11 +797,23 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
         },
         stats: { ...s.stats, jobAttempts: { ...s.stats.jobAttempts, [k]: 1 } },
       }
-      // 台詞在 data/npcs.json（鐵律 5：敘事文本不得纏進程式碼）。
-      // 決定性挑選：同一天同一刻必得同一句，存讀檔不會漂移。
+      /**
+       * 台詞在 data/npcs.json（鐵律 5：敘事文本不得纏進程式碼）。
+       * 決定性挑選：同一天同一刻必得同一句，存讀檔不會漂移。
+       *
+       * ★★ 舊版索引寫 `(day * 1440 + minute) % lines.length`，而【day 是死碼】：
+       *   全部八個 NPC 的台詞數是 4 或 5，而 1440 對兩者都整除——
+       *   於是 day 那一項模掉之後恆為 0，索引只由 minute 決定。
+       *   玩家在固定時段每天找同一個人講話，三十天聽到【同一句】，
+       *   而旁邊還印著「熟識 62　信任 41」。
+       *
+       * ★ 改用 day 本身：說話一天一次（canTalk 的日鍵擋著），
+       *   所以 day 正是「這是第幾次跟他說話」的正確軸。
+       *   四五句話會逐日輪替，而不是三十天釘在一句上。
+       */
       const lines = npc.talkLines
       log.push(lines.length > 0
-        ? lines[(s.clock.day * 1440 + s.clock.minute) % lines.length]!
+        ? lines[s.clock.day % lines.length]!
         : `你和${npc.name}說了一會兒話。`)
       s = setDayFlag(s, 'talked')
       s = { ...s, ledger: ledger(s, before, '說話', npc.name, ['去做別的']) }
