@@ -7,7 +7,7 @@
  */
 
 import { evaluate, type Ctx } from './cond.ts'
-import { pickWeighted } from './rng.ts'
+import { pickWeighted, rand } from './rng.ts'
 import type { EventDef, GameState, Index } from './types.ts'
 
 /**
@@ -82,6 +82,27 @@ export function drawEvent(s: GameState, idx: Index, ctx: Ctx): EventDef | null {
     s.at
   )
   return i < 0 ? null : (pool[i] ?? null)
+}
+
+/**
+ * ★ 這一幕此刻該顯示哪一段開場文字。
+ *
+ * `ev.text` 是第 0 則，`ev.variants` 接在後面；抽選由 (seed, 事件, 日, 分, 地點) 純函數導出，
+ * 走 `flavor` 串流——它與 encounter 串流互不干擾，因此【加減 variants 不會位移任何抽選序列】，
+ * 平衡跑分、存檔重播、reach 閉包全部不受影響。
+ *
+ * 為什麼 salt 帶 `minute` 而不只帶 `day`：分水井一天會排到兩三次隊，
+ * 只帶 day 的話同一天的第二次仍然一字不差。
+ *
+ * ★ 為什麼放在引擎而不是 UI：UI 每次 render 都會重跑，若在那裡抽數，
+ *   玩家只要縮放視窗、或存檔重讀，文字就會自己變——那是一個看不見卻很傷的 bug。
+ *   純函數放在引擎，同一時空永遠得到同一則。
+ */
+export function eventText(ev: EventDef, s: GameState): string {
+  if (!ev.variants || ev.variants.length === 0) return ev.text
+  const pool = [ev.text, ...ev.variants]
+  const i = Math.floor(rand(s.meta.seed, 'flavor', ev.id, s.clock.day, s.clock.minute, s.at) * pool.length)
+  return pool[Math.min(i, pool.length - 1)] ?? ev.text
 }
 
 /** 該事件此刻可選的選項（選項本身也可以有條件） */

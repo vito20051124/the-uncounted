@@ -12,7 +12,7 @@ import {
 import { clockLabel, tideAt, DECAY_PER_MIN, LAST_DAY } from '../engine/clock.ts'
 import { evaluate } from '../engine/cond.ts'
 import { affordable, offerRoutes, type Route } from '../engine/map.ts'
-import { availableChoices, drawEvent } from '../engine/events.ts'
+import { availableChoices, drawEvent, eventText } from '../engine/events.ts'
 import {
   DEPRIVATION_STAGES, explainSuppuration, isIncapacitated, needsHazard, needsTreatment,
   quoteSuppuration, P_WORSEN, P_WORSEN_TREATED, P_DEATH_SEVERE, P_DEATH_SEVERE_TREATED,
@@ -455,7 +455,7 @@ export function App() {
           <div class="narr-area">
             {log.length === 0 ? <Narr text={here.desc} /> : log.map((l, i) => <Narr key={i} text={l} cls="log" />)}
             {ev && !travelTo && ev.tell && <div class="tell">{ev.tell}</div>}
-            {ev && !travelTo && <Narr text={ev.text} />}
+            {ev && !travelTo && <Narr text={eventText(ev, s)} />}
             {travelTo && (
               <div class="route-banner">
                 你正在選擇前往 <strong>{IDX.node.get(travelTo)!.name}</strong> 的路線。下方地圖會標出你滑過的那一條。<br />

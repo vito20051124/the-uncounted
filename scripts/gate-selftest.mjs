@@ -254,6 +254,44 @@ selfTest({
   },
 })
 
+// ══════════════ ⑫ 敘事變體必須每一則都抽得到 ══════════════
+selfTest({
+  gate: '⑫', name: '池子裡有兩則一模一樣（複製貼上寫壞，玩家照樣讀到重複）',
+  script: 'unit-test.ts',
+  files: ['data/events.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const d = readJson('data/events.json')
+    const ev = d.find((e) => e.id === 'ev-market-well')
+    ev.variants[1] = ev.variants[0]
+    writeJson('data/events.json', d)
+  },
+})
+selfTest({
+  gate: '⑫', name: '★ 把選則邏輯改成永遠取第 0 則（尾巴那幾百個字變成白寫，畫面上完全正常）',
+  script: 'unit-test.ts',
+  files: ['src/engine/events.ts'],
+  mutate: ({ readText, writeText }) => {
+    const t = readText('src/engine/events.ts')
+    const from = "const i = Math.floor(rand(s.meta.seed, 'flavor'"
+    if (!t.includes(from)) throw new Error('注入錨點失效：eventText 的選則行找不到')
+    writeText('src/engine/events.ts',
+      t.replace(from, "const i = 0 * Math.floor(rand(s.meta.seed, 'flavor'"))
+  },
+})
+selfTest({
+  gate: '⑫', name: '★ salt 拿掉 minute（同一天的第二次取水會一字不差）',
+  script: 'unit-test.ts',
+  files: ['src/engine/events.ts'],
+  mutate: ({ readText, writeText }) => {
+    const t = readText('src/engine/events.ts')
+    const from = 's.clock.day, s.clock.minute, s.at'
+    if (!t.includes(from)) throw new Error('注入錨點失效：eventText 的 salt 找不到')
+    // 只留 day：可抽到的組合從 30×144×節點數 掉到 30×節點數，
+    // 池子大的那一幕就會出現抽不到的則。
+    writeText('src/engine/events.ts', t.replace(from, "s.clock.day, 0, 'bh:market'"))
+  },
+})
+
 // ══════════════ ②-bis 玩家可見欄位不得含設計註記 ══════════════
 selfTest({
   gate: '②-bis', name: '★ 設計註記寫進 gain.npc.fact（白名單反轉前漏掉的欄位）',

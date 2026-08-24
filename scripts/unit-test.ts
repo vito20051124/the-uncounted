@@ -30,6 +30,7 @@ import {
   attemptsLeft, canTalk, initialState, quoteHireChance, quoteMinutes, reduce, type Action,
 } from '../src/engine/reduce.ts'
 import { rand } from '../src/engine/rng.ts'
+import { eventText } from '../src/engine/events.ts'
 import { resolveEnding } from '../src/engine/ending.ts'
 
 const D = new URL('../data/', import.meta.url)
@@ -606,6 +607,99 @@ function invariants(s: GameState, prev: GameState, a: Action): string[] {
     problems.length ? problems.join('；')
       : '三條結局的每一個玩家該知道的門檻，宣告當下都真的講了出來')
 }
+
+/**
+ * ⑫ ★★ 寫了幾則變體，玩家就要抽得到幾則。
+ *
+ * 這是一道【反向驗證器】，與既有三道同一家族：
+ * 既有的檢查都在問「這個引用指得到東西嗎」（抓拼錯），
+ * 反向的在問「這個東西有沒有人用得到」（抓白寫）。
+ *
+ * 為什麼非要有這一道：`eventText` 用 `floor(rand(...) * pool.length)` 選則。
+ * 只要有人把選則邏輯改成取模、或改用只有兩三種取值的 salt，
+ * 尾巴那幾則就會【永遠抽不到】——而畫面上一切正常，
+ * 沒有任何既有的閘會變紅，我也永遠不會知道自己白寫了那幾百個字。
+ *
+ * 順帶檢查兩件同樣不會自己現形的事：
+ *   · 池子裡不得有兩則一模一樣（複製貼上寫壞了，玩家照樣讀到重複）
+ *   · 同一個時空必須永遠得到同一則（若哪天被搬進 UI 抽數，
+ *     玩家縮放視窗或存檔重讀，文字會自己變——那是看不見卻很傷的 bug）
+ *
+ * ★ 公平性不在這一道的守備範圍，因為結構上不可能破：
+ *   `tell`（致命警告）是獨立欄位、獨立渲染，變體換的只有 text，吃不掉警告。
+ */
+function testVariantsReachable() {
+  const problems: string[] = []
+  const withVar = [...IDX.event.values()].filter((e) => e.variants && e.variants.length > 0)
+
+  for (const ev of withVar) {
+    const pool = [ev.text, ...(ev.variants ?? [])]
+
+    // (a) 池子裡不得有重複
+    for (let i = 0; i < pool.length; i++) {
+      for (let j = i + 1; j < pool.length; j++) {
+        if (pool[i] === pool[j]) {
+          problems.push(`${ev.id} 的第 ${i} 則與第 ${j} 則一字不差 —— 玩家照樣會讀到重複`)
+        }
+      }
+    }
+
+    // (b) 每一則都要抽得到。掃真實的 (seed, 日, 分, 地點) 空間，不是抽樣猜。
+    const wheres = NODES
+    const hit = new Set<number>()
+    for (const seed of ['v-1', 'v-2', 'v-3']) {
+      for (let day = 1; day <= LAST_DAY; day++) {
+        for (let minute = 0; minute < 1440; minute += 10) {
+          for (const at of wheres) {
+            const s = { meta: { seed }, clock: { day, minute }, at } as unknown as GameState
+            hit.add(pool.indexOf(eventText(ev, s)))
+          }
+        }
+      }
+    }
+    for (let i = 0; i < pool.length; i++) {
+      if (!hit.has(i)) {
+        problems.push(`${ev.id} 的第 ${i} 則【任何時空都抽不到】`
+          + ` —— 那幾百個字是白寫的，而畫面上看不出來`)
+      }
+    }
+
+    // (d) ★ 同一天、同一個地點之內也必須會變。
+    //
+    // 這一條與 (b) 問的是【相反的問題】，所以量尺也必須不同：
+    //   (b) 問「這一則在整個時空裡有沒有人抽得到」→ 要掃【最寬】的空間
+    //   (d) 問「同一天回到同一口井，讀到的會不會一樣」→ 只能掃【一天之內】
+    // 用 (b) 的寬空間去回答 (d) 會永遠是綠的：把 salt 裡的 minute 整個拿掉，
+    // 每一則照樣抽得到（跨 30 天足夠打散），但玩家同一天排三次隊會讀到三次同一段字——
+    // 而那正是這一輪要修掉的東西。這個偽綠燈是自測注入實際撞出來的，不是假想。
+    {
+      const want = Math.min(pool.length, 3)
+      for (const [seed, day, at] of [['v-1', 3, 'bh:market'], ['v-2', 17, 'bh:quays']] as const) {
+        const inDay = new Set<string>()
+        for (let minute = 0; minute < 1440; minute += 30) {
+          inDay.add(eventText(ev, { meta: { seed }, clock: { day, minute }, at } as unknown as GameState))
+        }
+        if (inDay.size < want) {
+          problems.push(`${ev.id} 在同一天（seed=${seed} 第 ${day} 日 ${at}）只變得出 ${inDay.size} 種`
+            + `，至少要有 ${want} 種 —— 同一天回到同一個地方會讀到一字不差的重複`)
+        }
+      }
+    }
+
+    // (c) 同一個時空必須永遠是同一則
+    const s0 = { meta: { seed: 'v-1' }, clock: { day: 7, minute: 540 }, at: 'bh:market' } as unknown as GameState
+    if (eventText(ev, s0) !== eventText(ev, s0)) {
+      problems.push(`${ev.id} 的 eventText 不是純函數 —— 同一時空兩次呼叫給出不同文字`)
+    }
+  }
+
+  T(12, '★★ 每一則敘事變體都真的抽得到（寫了就要有人讀到）',
+    problems.length === 0,
+    problems.length ? problems.join('；')
+      : `${withVar.length} 幕共 ${withVar.reduce((a, e) => a + (e.variants?.length ?? 0), 0)} 則變體`
+        + `，每一則在真實時空裡都抽得到；同一天同一地點至少變得出三種；無重複；抽選為純函數`)
+}
+testVariantsReachable()
 
 // ── 輸出 ──
 console.log('=== 無籍者 · 單元／性質測試 ===\n')
