@@ -55,6 +55,8 @@ interface Policy {
    *   · 「平凡是不是活下來就自動送」→ 用純領工資的政策（careful）
    */
   roam?: boolean
+  /** ★ 「四處看看」的政策：只服務【內容曝光率】那一個指標，不參與任何驗收閘。 */
+  explore?: boolean
 }
 /** 會走動的政策要跑遍的四個城區——★ 含兩個【不發工錢】的地方 */
 const ROAM: Array<'bh:quays' | 'bh:market' | 'bh:cinder' | 'bh:grotto'> =
@@ -64,9 +66,11 @@ const ROAM: Array<'bh:quays' | 'bh:market' | 'bh:cinder' | 'bh:grotto'> =
 function play(seed: string, pol: Policy = { careful: true }): GameState {
   let s = initialState(seed, 'bh:alley', ['item-bandaid', 'item-lighter', 'item-candy'], IDX)
   let steps = 0
+  const visited = new Set([s.at])
   const step = (a: Action) => {
     const b = s.clock.day * 1440 + s.clock.minute
     s = reduce(s, a, IDX).s
+    visited.add(s.at)
     if (!s.dead && s.clock.day * 1440 + s.clock.minute === b) s = reduce(s, { t: 'wait', minutes: 30 }, IDX).s
   }
 
@@ -147,7 +151,65 @@ function play(seed: string, pol: Policy = { careful: true }): GameState {
     if (pol.roam) {
       const safe = s.needs.hydration > 55 && s.needs.satiety > 55 && s.needs.stamina > 55
       const stranger = [...IDX.npc.values()].find((n) => (s.npcs[n.id]?.acquaintance ?? 0) < 30)
-      if (safe && stranger && h >= 8 && h < 17) target = stranger.at
+      /**
+       * ★★ 除了「去見還不認得她的人」，也要「去還沒去過的地方」。
+       *
+       * 第一版只認 stranger.at，而【蒸發池沒有 NPC】——於是這個政策
+       * 從來不去那裡，連帶那一區的四幕在 400 局裡一次都沒出現。
+       * 而「跑遍 400 局沒出現」被我讀成內容缺陷，其實一半是量尺的錯：
+       * 政策的目的地清單漏了沒有人的節點。
+       *
+       * ★ 這不是為了讓數字好看而放寬——內容曝光率這個指標問的是
+       *   「一個【會四處走】的玩家看得到多少」，而一個會四處走的玩家
+       *   當然也會去沒有人的地方。目的地清單少一個節點，量的就是別的東西。
+       */
+      /**
+       * ★★★ 用【集合】挑目的地，不要用 .find()。
+       *
+       * 第一版寫 `const stranger = [...npcs].find(acq < 30)`，而那有兩個問題：
+       *   ① .find() 在一份順序固定的清單上永遠回傳同一個人，
+       *      於是這個政策【固著】在同一個目的地——它不是在走動，是在來回。
+       *   ② stranger 幾乎永遠為真（8 個 NPC 只認識 3–5 個），
+       *      所以「去沒去過的地方」那一支永遠輪不到。
+       *
+       * 修法：把「還有人不認得她的節點」與「還沒去過的節點」合成一個候選集，
+       * 用同一條 seeded rand 從裡面挑——而【沒去過的地方優先】，
+       * 因為那才是「四處走」的意思。
+       */
+      if (safe && h >= 8 && h < 17) {
+        /**
+         * ★★ roam 與 explore 是【兩把不同的尺】，因為它們回答兩個不同的問題：
+         *
+         *   roam    「想被人認得的玩家」→ 優先去【還有人不認得她的地方】
+         *            用來回答：平凡這條結局達不達得到
+         *   explore 「四處看看的玩家」  → 優先去【還沒去過的地方】
+         *            用來回答：一局實際看得到多少內容
+         *
+         * ★ 我一度把兩者合成一個政策（讓 roam 優先去沒去過的地方），
+         *   結果它變得更會逛、但【更不被認得】——灰姐 79% 掉到 17%，
+         *   而平凡的驗收量的正是後者，於是那道閘紅了。
+         *   那不是內容變差，是我把兩個問題塞進同一把尺。
+         *   （這個 session 自己訂過這條規矩：兩道相反的閘各用能回答它那個問題的量尺。）
+         */
+        if (pol.explore) {
+          // 四處看看：優先去沒去過的地方，都去過了就隨機挑一個
+          const unvisited = [...IDX.node.keys()].filter((n) => !visited.has(n))
+          const pool = unvisited.length > 0 ? unvisited : [...IDX.node.keys()]
+          target = pool[Math.floor(rand(seed, 'flavor', steps + 7777) * pool.length)]!
+        } else if (stranger) {
+          /**
+           * ★★ 想被人認得：【固定去同一個人】直到認識他，再換下一個。
+           *
+           * 我一度把這個 .find() 的「固著」判成 bug 而改成隨機挑一個生人——
+           * 結果它變成在幾個人之間跳來跳去，誰都認不熟：
+           * 灰姐 79% 掉到 17%、平凡從 38% 掉到 20%。
+           *
+           * ★ 那不是 bug，那是【對的行為】：先把一個人認識完再換下一個，
+           *   本來就是人做事的方式。而這把尺量的正是「有幾個人認得她的臉」。
+           */
+          target = stranger.at
+        }
+      }
     }
     if (s.at !== target) {
       const rs = offerRoutes(s, IDX, tideAt(s.clock.minute), target).filter((r) => affordable(r, s.needs.stamina))
@@ -222,6 +284,14 @@ console.log(`結局清潔中位數   ${sloppyHyg.toFixed(0)}　（小心 ${caref
 //     若每一個活到第三十日的人【自動】滿足平凡，那平凡在機制上就等於
 //     「你活下來了」＝預設值＝那個 else 分支——而那正是 ending.ts 檔頭
 //     花整段篇幅要避免的違憲形狀。它必須明顯低於 100%，否則設計是假的。
+/**
+ * 「四處看看」的第四種政策。
+ * ★ 它【只服務內容曝光率那一個指標】，不參與任何驗收閘——
+ *   因為「一局看得到多少內容」與「平凡達不達得到」是兩個問題，
+ *   而一個政策同時服務兩個問題時，改善其中一個必然傷害另一個。
+ */
+const explore = Array.from({ length: N }, (_, i) => play(`bal-${i}`, { careful: true, roam: true, explore: true }))
+
 /** 不發工錢的節點，以及站在那裡的人（npcOffWage 實際上在數的東西） */
 const paidNodes = new Set([...IDX.job.values()].map((j) => j.at))
 const offWageNodes = new Set([...IDX.node.keys()].filter((n) => !paidNodes.has(n)))
@@ -327,6 +397,51 @@ console.log('     所以「活過三十天卻不可能拿到任何結局」這�
  */
 const lateSurvivors = [...alive, ...roamAlive].filter((s) => s.clock.day > 12)
 const lockedOut = lateSurvivors.filter((s) => !s.flags['census-passed'] && !s.flags['census-fled'])
+
+/**
+ * ★★ 內容曝光：一局三十天，玩家實際看到全部內容的幾成。
+ *
+ * 這是「完整度」最核心的一個數字，而它跟 live-reach 的 R3 問的【不是同一件事】：
+ *   · live-reach：這個事件【可不可能】被看到（可達性）
+ *   · 這裡：這個事件【實際上】有多少局會被看到（曝光率）
+ * 兩者的差距就是「寫了但幾乎沒人看得到」的那一堆內容。
+ *
+ * ★ 曝光率低【不一定】是缺陷：一次性主線事件本來就只出現一次，
+ *   而稀有的事件正是重玩價值的來源。所以這一段【只報告不設閘】——
+ *   它要回答的是「這款遊戲有多少內容是真的在運作的」，
+ *   而那是一個需要人來判斷的問題，不是一個可以訂門檻的問題。
+ */
+{
+  const seen = (pool: GameState[]) => pool.map((s) => s.stats.eventsSeen.length)
+  const pct = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0)
+  const total = IDX.event.size
+  const freq = new Map<string, number>()
+  const allRuns = [...runs, ...roam, ...explore]
+  for (const s of allRuns) for (const id of s.stats.eventsSeen) freq.set(id, (freq.get(id) ?? 0) + 1)
+  const never = [...IDX.event.values()].filter((e) => !freq.has(e.id))
+  const rare = [...IDX.event.values()]
+    .map((e) => ({ e, n: freq.get(e.id) ?? 0 }))
+    .filter((x) => x.n > 0 && x.n / allRuns.length < 0.05)
+    .sort((a, b) => a.n - b.n)
+
+  console.log(`\n── 內容曝光：一局看得到多少 ──`)
+  console.log(`   純領工資 ${pct(seen(alive)).toFixed(1)} / ${total} 個事件`
+    + `（${((pct(seen(alive)) / total) * 100).toFixed(0)}%）`)
+  const exploreAlive = explore.filter((s) => !s.dead)
+  console.log(`   四處看看 ${pct(seen(exploreAlive)).toFixed(1)} / ${total} 個事件`
+    + `（${((pct(seen(exploreAlive)) / total) * 100).toFixed(0)}%）`)
+  console.log(`   會走動　 ${pct(seen(roamAlive)).toFixed(1)} / ${total} 個事件`
+    + `（${((pct(seen(roamAlive)) / total) * 100).toFixed(0)}%）`)
+  console.log(`   ★ 跑遍 ${allRuns.length} 局之後仍【一次都沒出現】的事件：${never.length} 個`
+    + (never.length ? `\n     ${never.map((e) => e.id).join('、')}` : ''))
+  if (rare.length > 0) {
+    console.log(`   曝光率 < 5% 的事件：${rare.length} 個`
+      + `\n     ${rare.slice(0, 8).map((x) => `${x.e.id}(${((x.n / allRuns.length) * 100).toFixed(1)}%)`).join('、')}`
+      + (rare.length > 8 ? ' …' : ''))
+  }
+  console.log(`   ※ 只報告不設閘：一次性主線事件本來就只出現一次，`)
+  console.log(`     而稀有事件正是重玩價值的來源——這需要人判斷，不是一個可以訂門檻的數字。`)
+}
 
 // ── 一局死亡的完整決策鏈（判斷公平性：預警夠不夠、躲不躲得掉）──
 const sample = dead[0]
