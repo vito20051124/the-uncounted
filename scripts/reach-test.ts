@@ -105,6 +105,16 @@ const EXPECT: Record<string, NodeId[] | null> = {
   'ev-pans-shard': ['bh:pans'],
   'ev-grotto-workshop': ['bh:grotto'],
   'ev-cathedral-curfew': ['bh:cathedral'],
+
+  // 鐵根造船區（這一區原本 0 個事件——加了城區與工作卻沒有任何一幕）
+  'ev-yards-outsider': ['bh:yards'],
+  'ev-yards-quench': ['bh:yards'],
+  'ev-yards-mast-fire': ['bh:yards'],
+  'ev-yards-rope-thirty': ['bh:yards'],
+  // 聖鹵大聖堂區（原本只有宵禁那一幕）
+  'ev-cathedral-baptism': ['bh:cathedral'],
+  'ev-cathedral-orphans': ['bh:cathedral'],
+  'ev-cathedral-reading': ['bh:cathedral'],
 }
 
 const ALL_NODES = [...IDX.node.keys()]
