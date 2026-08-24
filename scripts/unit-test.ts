@@ -22,7 +22,7 @@
 
 import { readFileSync } from 'node:fs'
 import { buildIndex, type Content, type GameState, type Index } from '../src/engine/types.ts'
-import { NEED_KEYS } from '../src/engine/clock.ts'
+import { LAST_DAY, NEED_KEYS } from '../src/engine/clock.ts'
 import { DEPRIVATION_STAGES, quoteSuppuration, needsHazard } from '../src/engine/body.ts'
 import { staminaFor } from '../src/engine/map.ts'
 import { CLEAN, HOT_MEAL_WARMTH, SHELTER, fatigueMul } from '../src/engine/mind.ts'
@@ -495,6 +495,116 @@ function invariants(s: GameState, prev: GameState, a: Action): string[] {
   T(10, '★ reducer 自己守住買賣的地理前置（不靠介面擋）',
     problems.length === 0,
     problems.length ? problems.join('；') : '不賣的地方買不到、不收的地方賣不掉，而該成交的地方照樣成交')
+}
+
+/**
+ * ⑪ ★★★ 遊戲【親口告訴玩家】的結局條件，必須與程式實際判定的一致。
+ *
+ * 這一項的來由是一個真的踩到的缺陷，而且是最傷的一種：
+ *
+ *   第五章開場 ev-ch5-aim 讓玩家宣告目標，並在 resultText 裡逐條列出
+ *   那條結局要什麼。而我在另一輪把「平凡」的條件從
+ *   「三個人認得她」改成「四個人 ＋ 至少一個在不發工錢的地方」時，
+ *   只更新了「還沒有」畫面上的 asks，【沒有更新宣告當下那段話】。
+ *
+ *   結果：遊戲告訴玩家要三個人（實際四個）、要冊子上有名字（沒這條）、
+ *   要給出去三次（沒這條，而且我明確決定過不拿它當門票），
+ *   而真正決定成敗的 npcOffWage 一個字都沒提。
+ *
+ *   ★ 照遊戲自己講的條件去玩，會準確地撞上「還沒有」。
+ *     那比一個藏起來的條件更傷——它是遊戲主動給了錯的指示。
+ *
+ * ★★ 方向很重要，而我第一版寫反了。
+ *
+ *   寫反的版本：「文本裡提到的每一個數字，都必須是一個門檻」。
+ *   那會被敘事數字誤觸——安家那段講「老鹽街的單間，一輪六十銅……所以是一百二十」，
+ *   而 120 不是任何一條 requires 的數字，它只是一句話。第一版因此吐出八個假警報。
+ *
+ *   正確的方向：「requires 裡的每一個【玩家該知道的門檻】，都必須在文本裡被講出來」。
+ *     · 不會被敘事數字誤觸（它不管文本多講了什麼）
+ *     · 而且正好抓到這次的缺陷：atLeast 從 3 改成 4，而文本還寫著「三個人」，
+ *       於是「4」在文本裡找不到 → 紅
+ *
+ * ★ 只查【玩家該知道的】那幾個謂詞（人數、上工日數、被指名次數）。
+ *   day: '>=28' 不查——那是截止日，敘事上講的是「第三十日」而不是 28。
+ *   flag 也不查——旗標的名字不是給玩家看的東西。
+ *   （比照單元測試 ⑧ 對 conditions.json 的做法：文件也要被測試。）
+ *
+ * ★★ 誠實的界線：它是一道 lint，不是證明。
+ *   它只確認那個數字【出現在文本某處】，不確認它接在正確的那句話上——
+ *   散文與條件的一致性沒辦法全自動驗證。
+ *   但它抓得到真正的失敗模式：【改了條件而忘了改文本】，
+ *   因為那時那個數字會從文本裡完全消失。這次的缺陷正是這個形狀。
+ */
+{
+  const problems: string[] = []
+  const aim = IDX.event.get('ev-ch5-aim')
+  if (!aim) {
+    problems.push('找不到 ev-ch5-aim —— 三條結局的唯一宣告入口不見了')
+  } else {
+    /** 阿拉伯數字 → 中文寫法（宣告文本用「四個人」「十八天」這種寫法） */
+    const cn = (n: number): string[] => {
+      const d = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九']
+      if (n < 10) return [d[n]!, ...(n === 2 ? ['兩'] : [])]
+      if (n < 20) return [n === 10 ? '十' : `十${d[n - 10]}`]
+      if (n % 10 === 0) return [`${d[Math.floor(n / 10)]}十`]
+      return [`${d[Math.floor(n / 10)]}十${d[n % 10]}`]
+    }
+    /**
+     * 玩家該知道的門檻。
+     * ★ 刻意只有這三個：人數、上工日數、被指名次數——
+     *   它們是玩家可以【主動去湊】的數字，所以遊戲有義務講清楚。
+     */
+    const thresholds = (c: unknown, out: Array<{ what: string; n: number }> = []) => {
+      if (!c || typeof c !== 'object') return out
+      const o = c as Record<string, unknown>
+      const cmpNum = (v: unknown) => {
+        const m = /(\d+)/.exec(String(v ?? ''))
+        return m ? Number(m[1]) : null
+      }
+      const npcCount = o.npcCount as { atLeast?: number } | undefined
+      const npcOffWage = o.npcOffWage as { atLeast?: number } | undefined
+      if (npcCount?.atLeast !== undefined) out.push({ what: '認得她的人數', n: npcCount.atLeast })
+      if (npcOffWage?.atLeast !== undefined) out.push({ what: '在不發工錢的地方認得她的人數', n: npcOffWage.atLeast })
+      if (o.wageDays !== undefined) { const n = cmpNum(o.wageDays); if (n !== null) out.push({ what: '上工日數', n }) }
+      if (o.namedAsks !== undefined) { const n = cmpNum(o.namedAsks); if (n !== null) out.push({ what: '被指名次數', n }) }
+      for (const k of ['all', 'any'] as const) {
+        if (Array.isArray(o[k])) for (const sub of o[k] as unknown[]) thresholds(sub, out)
+      }
+      if (o.not) thresholds(o.not, out)
+      return out
+    }
+    for (const ch of aim.choices) {
+      const flags = [ch.gain?.flag ?? []].flat() as string[]
+      const aimFlag = flags.find((f) => f.startsWith('aim-'))
+      if (!aimFlag) { problems.push(`ev-ch5-aim 的選項「${ch.label}」沒有設任何 aim-* 旗標`); continue }
+      const def = [...IDX.ending.values()].find((e) => e.aim === aimFlag)
+      if (!def) { problems.push(`宣告了 ${aimFlag} 卻沒有對應的結局`); continue }
+      const text = ch.resultText ?? ''
+      /**
+       * ★ 同一種門檻只查【最低的那一個】。
+       *   立業的替代分支要 namedAsks >= 3，而主路徑只要 >= 2——
+       *   玩家該知道的是可行動的那個目標（2），
+       *   替代分支的較高門檻不需要預先規劃，寫進宣告文只會讓那段話變成規則表。
+       */
+      const minBy = new Map<string, number>()
+      for (const { what, n } of thresholds(def.requires)) {
+        const cur = minBy.get(what)
+        if (cur === undefined || n < cur) minBy.set(what, n)
+      }
+      for (const [what, n] of minBy) {
+        const forms = [String(n), ...cn(n)]
+        if (forms.some((f) => text.includes(f))) continue
+        problems.push(`${def.id} 要求「${what} ${n}」，但宣告「${ch.label}」時的文本`
+          + `【沒有把這個數字告訴玩家】（找過 ${forms.join('／')}）`
+          + ` —— 照遊戲講的去玩會撞上「還沒有」`)
+      }
+    }
+  }
+  T(11, '★★ 遊戲親口講的結局條件，數字必須對得上程式實際判定的',
+    problems.length === 0,
+    problems.length ? problems.join('；')
+      : '三條結局的每一個玩家該知道的門檻，宣告當下都真的講了出來')
 }
 
 // ── 輸出 ──
