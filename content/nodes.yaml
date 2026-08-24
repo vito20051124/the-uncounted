@@ -122,7 +122,8 @@
   sells:
     - item-rye-bread
     - item-well-water
-  buys: []
+  buys:
+    - item-keys
   mapX: 55
 - id: bh:cathedral
   name: 聖鹵大聖堂區

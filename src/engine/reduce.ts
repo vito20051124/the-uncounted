@@ -622,6 +622,20 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
 
     case 'buy': {
       const it = must(idx.item, a.item, '物品')
+      /**
+       * ★★ 地理必須由【reducer 自己】守。
+       *
+       * 舊版只檢查買不買得起，完全不看【這裡有沒有賣】——
+       * 而 here.sells 的過濾只存在於 App.tsx。這是本專案已經裁決過的同一個缺陷：
+       *   「case 'work' 不檢查 job.when，時段限制原本只存在於 App.tsx，
+       *     reducer 會接受凌晨三點上工，只有介面在擋。」
+       * 介面擋得住玩家，擋不住跑分腳本、存讀檔重播、與未來的任何新介面。
+       */
+      const hereBuy = must(idx.node, s.at, '節點')
+      if (!hereBuy.sells.includes(a.item)) {
+        log.push(`這裡沒有人賣${it.name}。`)
+        break
+      }
       if (it.priceCopper === null || s.purse.copper < it.priceCopper) {
         log.push(`你買不起${it.name}。`)
         break
@@ -640,6 +654,18 @@ export function reduce(state: GameState, a: Action, idx: Index): StepResult {
 
     case 'sell': {
       const it = must(idx.item, a.item, '物品')
+      /**
+       * ★★ 同上：收購也要看地理。
+       *
+       * 鑰匙是現代精密切削的硬化鋼，而「鐵匠識貨」——收它的是灰棚巷的黑市、
+       * 石窟街的寂裔工匠、鐵根造船區的黑匠公會，不是蒸發池的池壁。
+       * node.buys 這份資料一直都在，而【只有介面在讀它】。
+       */
+      const hereSell = must(idx.node, s.at, '節點')
+      if (!hereSell.buys.includes(a.item)) {
+        log.push(`這裡沒有人收${it.name}。`)
+        break
+      }
       const price = it.sellCopper ?? 0
       if (countItem(s, a.item) <= 0 || price <= 0) break
       s = applyMinutes(s, 15, idx)

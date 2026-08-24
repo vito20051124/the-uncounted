@@ -443,6 +443,60 @@ function invariants(s: GameState, prev: GameState, a: Action): string[] {
     problems.length ? problems.join('；') : `${IDX.ending.size} 條結局各自綁定 aim flag，交叉宣告不會誤中`)
 }
 
+/**
+ * ⑩ ★★ reducer 必須守住【自己的】地理前置條件，不能靠介面擋。
+ *
+ * 這是本專案第三次踩到同一個形狀：
+ *   · case 'work' 不檢查 job.when —— 時段限制只存在於 App.tsx，
+ *     reducer 會接受凌晨三點上工
+ *   · treat/herbs 不管站在哪裡都用 1 銅買到藥膏 —— 而那味藥只在市集賣，
+ *     順帶讓 8 銅的私煉灰膏變成永遠不會有人買的死物品
+ *   · case 'buy' 不檢查 here.sells、case 'sell' 不檢查 here.buys ——
+ *     node.buys 這份資料一直都在，而【只有介面在讀它】
+ *
+ * 介面擋得住玩家，擋不住跑分腳本、存讀檔重播、與未來的任何新介面。
+ * 所以這一項不驗「介面有沒有藏按鈕」，它直接對 reducer 下不該成立的 action。
+ */
+{
+  const problems: string[] = []
+  const rich = (at: string) => ({
+    ...initialState('geo', at as never, [], IDX),
+    purse: { copper: 500 },
+    carry: [{ item: 'item-keys' as never, count: 1 }],
+  })
+  // 買：蒸發池什麼都不賣（canon：城外的鹽田，沒有攤子）
+  {
+    const before = rich('bh:pans')
+    const after = reduce(before, { t: 'buy', item: 'item-rye-bread' as never }, IDX).s
+    if (after.purse.copper !== before.purse.copper) {
+      problems.push('在不賣麵包的蒸發池竟然買到了麵包（reducer 沒守 here.sells）')
+    }
+  }
+  // 買：市集有賣麵包 —— 這一格必須成立，否則是誤擋
+  {
+    const before = rich('bh:market')
+    const after = reduce(before, { t: 'buy', item: 'item-rye-bread' as never }, IDX).s
+    if (after.purse.copper >= before.purse.copper) problems.push('市集有賣麵包卻買不到（誤擋）')
+  }
+  // 賣：蒸發池不收鑰匙鋼
+  {
+    const before = rich('bh:pans')
+    const after = reduce(before, { t: 'sell', item: 'item-keys' as never }, IDX).s
+    if (after.purse.copper !== before.purse.copper) {
+      problems.push('在池壁邊把現代硬化鋼賣掉了（reducer 沒守 here.buys）')
+    }
+  }
+  // 賣：石窟街收鑰匙鋼 —— 必須成立
+  {
+    const before = rich('bh:grotto')
+    const after = reduce(before, { t: 'sell', item: 'item-keys' as never }, IDX).s
+    if (after.purse.copper <= before.purse.copper) problems.push('石窟街收鑰匙卻賣不掉（誤擋）')
+  }
+  T(10, '★ reducer 自己守住買賣的地理前置（不靠介面擋）',
+    problems.length === 0,
+    problems.length ? problems.join('；') : '不賣的地方買不到、不收的地方賣不掉，而該成交的地方照樣成交')
+}
+
 // ── 輸出 ──
 console.log('=== 無籍者 · 單元／性質測試 ===\n')
 let pass = true
@@ -451,5 +505,6 @@ for (const r of results) {
   console.log(`  ${r.ok ? 'PASS' : 'FAIL'}  ${String(r.n).padStart(2)}. ${r.name}`)
   if (r.note) console.log(`         ${r.note}`)
 }
-console.log(pass ? '\n[PASS] 9 項單元測試全數通過。' : '\n[FAIL] 有項目未通過。')
+// ★ 項數由 results.length 導出，不寫死（smoke.ts 曾經寫死「30 項」而實際已是 33）
+console.log(pass ? `\n[PASS] ${results.length} 項單元測試全數通過。` : '\n[FAIL] 有項目未通過。')
 process.exit(pass ? 0 : 1)
