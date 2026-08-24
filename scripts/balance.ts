@@ -270,6 +270,59 @@ console.log(`   死亡率 ${roamDeadRate.toFixed(1)}%（純領工資 ${deathRate
 console.log(`   平均收入 ${roamEarned.toFixed(0)} 銅（純領工資 ${avgEarned.toFixed(0)}）　上工日 ${med(roamAlive.map((s) => s.stats.wageDays))}（${medWageWage}）`)
 console.log(`   平均受傷 ${(roam.reduce((a, s) => a + s.stats.injuriesTaken, 0) / roam.length).toFixed(1)} 道（純領工資 ${injTaken.toFixed(1)}）`)
 
+/**
+ * ★★★ 主線瓶頸：三條結局共用的那一條鏈，有多少人真的走得完。
+ *
+ * 旗標的設定端／讀取端統計揭穿了一件事：
+ *   census-passed 讀 4 / 設 1　　census-fled 讀 4 / 設 1
+ * 而三條身分路【全部】要求 `any: [census-passed, census-fled]`，
+ * 兩者又都只出自同一個事件 ev-guard-census。它的前置是 saw-dross，
+ * 而 saw-dross 也只出自一個事件 ev-dross-trace，且那一幕【只在她落地的那條巷子】。
+ *
+ * 於是整個第三章與其後的三條結局，掛在兩幕的抽取運氣上：
+ *   ev-dross-trace（巷子）→ saw-dross → ev-guard-census（市集/碼頭，日 4 起，08–17）
+ *   → census-* → 三路之一 → identity-obtained → ev-ch5-aim → 三條結局
+ *
+ * ★ 兩幕的每一個選項都會設旗標，所以【遇到就過】——風險不是選錯，是沒遇到。
+ *   一個習慣睡碼頭通鋪的玩家可能整局很少在巷子裡抽到事件。
+ *
+ * 這一段把那個風險變成一個【看得見的數字】，而不是一句設計上的擔心。
+ */
+const bottleneck = (pool: GameState[], label: string) => {
+  const pct = (f: string) => (pool.length ? (pool.filter((s) => s.flags[f]).length / pool.length) * 100 : 0)
+  const census = pool.length
+    ? (pool.filter((s) => s.flags['census-passed'] || s.flags['census-fled']).length / pool.length) * 100
+    : 0
+  const aim = pool.length
+    ? (pool.filter((s) => s.flags['aim-hearth'] || s.flags['aim-trade'] || s.flags['aim-quiet']).length / pool.length) * 100
+    : 0
+  return `   ${label.padEnd(6)} 看見殘滓 ${pct('saw-dross').toFixed(0).padStart(3)}%`
+    + ` → 查籍 ${census.toFixed(0).padStart(3)}%`
+    + ` → 有身分 ${pct('identity-obtained').toFixed(0).padStart(3)}%`
+    + ` → 宣告目標 ${aim.toFixed(0).padStart(3)}%`
+}
+console.log(`\n── 主線瓶頸：三條結局共用的那一條鏈 ──`)
+console.log(bottleneck(alive, '領工資'))
+console.log(bottleneck(roamAlive, '會走動'))
+console.log('   ★ 查籍那一幕現在有三個入口（殘滓／公告／第 12 日的保底），')
+console.log('     所以「活過三十天卻不可能拿到任何結局」這件事應該【不會發生】。')
+
+/**
+ * ★★ 沒有任何存活者可以被【靜默鎖死】在三條結局之外。
+ *
+ * 這一條的依據是支柱一：三條結局沒有優劣，平凡也不是失敗結局。
+ * 若一個玩家可以活過三十天、卻因為兩幕沒抽到而【不可能】拿到任何一條，
+ * 那遊戲就有了一個既不是死亡、也不是選擇的失敗狀態——
+ * 而且他不會知道自己是在哪一天失去它的。
+ *
+ * 保底是第 12 日：普查是全城系統性作業，沒有人能整整一個月不被找到。
+ * 所以【活到第 12 日以後的存活者】必須全部拿得到 census-*。
+ * ★ 這不是一個調出來的門檻，是那條保底條款的機械後果——
+ *   它若失敗，代表保底本身壞了。
+ */
+const lateSurvivors = [...alive, ...roamAlive].filter((s) => s.clock.day > 12)
+const lockedOut = lateSurvivors.filter((s) => !s.flags['census-passed'] && !s.flags['census-fled'])
+
 // ── 一局死亡的完整決策鏈（判斷公平性：預警夠不夠、躲不躲得掉）──
 const sample = dead[0]
 if (sample) {
@@ -344,6 +397,11 @@ const checks: Array<[string, boolean, string]> = [
   ['★ 而兩組必須明顯分離（差 ≥30 個百分點＝這條結局真的在問一件事）',
     roamQuiet.pct - wageQuiet.pct >= 30,
     `走動 ${roamQuiet.pct.toFixed(0)}% − 領工資 ${wageQuiet.pct.toFixed(0)}% = ${(roamQuiet.pct - wageQuiet.pct).toFixed(0)} 點`],
+  ['★★ 沒有人被靜默鎖死在三條結局之外（第 12 日後的存活者全部過得了查籍）',
+    lockedOut.length === 0,
+    lockedOut.length === 0
+      ? `${lateSurvivors.length} 局活過第 12 日，全部拿得到 census-*`
+      : `★ ${lockedOut.length}/${lateSurvivors.length} 局活著卻【不可能】拿到任何結局——保底條款壞了`],
 ]
 void maxShare
 console.log('')

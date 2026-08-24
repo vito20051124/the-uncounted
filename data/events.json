@@ -1499,7 +1499,17 @@
               ]
             },
             {
-              "flag": "saw-dross"
+              "any": [
+                {
+                  "flag": "saw-dross"
+                },
+                {
+                  "flag": "census-warned"
+                },
+                {
+                  "day": ">=12"
+                }
+              ]
             },
             {
               "not": {

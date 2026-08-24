@@ -39,9 +39,9 @@ const root = path.join(here, '..')
 const P = (rel) => path.join(root, rel)
 
 /** 跑一個腳本，回傳 exit code（不吃它的輸出） */
-function runGate(script) {
+function runGate(script, args = []) {
   try {
-    execFileSync(process.execPath, [P(`scripts/${script}`)], { cwd: root, stdio: 'pipe' })
+    execFileSync(process.execPath, [P(`scripts/${script}`), ...args], { cwd: root, stdio: 'pipe' })
     return 0
   } catch (e) {
     return e.status ?? 1
@@ -59,13 +59,13 @@ const T = (gate, name, ok, note = '') => results.push({ gate, name, ok, note })
  * 一個案例：暫時改壞 files 裡的每個檔，跑 gate，斷言非零，然後還原。
  * @param mutate  (helpers) => void   —— 改壞
  */
-function selfTest({ gate, name, script = 'validate-data.mjs', files, mutate }) {
+function selfTest({ gate, name, script = 'validate-data.mjs', args = [], files, mutate }) {
   const backups = new Map()
   for (const f of files) backups.set(f, fs.readFileSync(P(f)))
   try {
     mutate({ readJson, writeJson, readText: (f) => fs.readFileSync(P(f), 'utf-8'),
       writeText: (f, t) => fs.writeFileSync(P(f), t) })
-    const code = runGate(script)
+    const code = runGate(script, args)
     T(gate, name, code !== 0, code !== 0 ? `exit ${code}` : '★ 閘門【放行】了這個違規')
   } catch (err) {
     T(gate, name, false, `自測本身出錯：${err.message}`)
@@ -380,6 +380,24 @@ selfTest({
     const n = readJson('data/nodes.json')
     for (const x of n) x.sells = (x.sells ?? []).filter((i) => i !== 'item-ash-salve')
     writeJson('data/nodes.json', n)
+  },
+})
+
+// ══════════════ 平衡：沒有人被靜默鎖死在三條結局之外 ══════════════
+//
+// ★ 這一項不是資料驗證，是【跑分】——所以它比其他案例慢（60 seed 約 8 秒）。
+//   值得：它守的是本作唯一一個「既不是死亡、也不是選擇」的失敗狀態。
+//   拿掉查籍那一幕的保底入口，實測就有 26/340 局活著卻不可能拿到任何結局。
+selfTest({
+  gate: '平衡', name: '★★ 拿掉查籍的保底入口 → 有人活著卻不可能拿到任何結局',
+  script: 'balance.ts', args: ['60'], files: ['data/events.json'],
+  mutate: ({ readJson, writeJson }) => {
+    const d = readJson('data/events.json')
+    const e = d.find((x) => x.id === 'ev-guard-census')
+    const inner = e.requires.all[0].all
+    const i = inner.findIndex((c) => c.any)
+    inner[i] = { flag: 'saw-dross' } // 退回只有一個入口的舊版
+    writeJson('data/events.json', d)
   },
 })
 
