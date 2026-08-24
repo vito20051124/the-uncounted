@@ -17,7 +17,7 @@ import { readFileSync } from 'node:fs'
 import { buildIndex, type Content, type GameState } from '../src/engine/types.ts'
 import { LAST_DAY, tideAt } from '../src/engine/clock.ts'
 import { isIncapacitated } from '../src/engine/body.ts'
-import { CLEAN, canUnwind, type CleanKind } from '../src/engine/mind.ts'
+import { CLEAN, FADE_GRACE_DAYS, FADE_PER_DAY, canUnwind, type CleanKind } from '../src/engine/mind.ts'
 import { evaluate } from '../src/engine/cond.ts'
 import { affordable, offerRoutes } from '../src/engine/map.ts'
 import { availableChoices, drawEvent } from '../src/engine/events.ts'
@@ -379,6 +379,22 @@ console.log(`   └ 會走動組（四個城區都去，含兩個不發工錢的
 console.log(`       安家 ${endShare('aim-hearth', roamAlive).pct.toFixed(0)}%　立業 ${endShare('aim-trade', roamAlive).pct.toFixed(0)}%　平凡 ${roamQuiet.pct.toFixed(0)}%`)
 console.log(`       上工日數中位數 ${med(roamAlive.map((s) => s.stats.wageDays))}／需 18　　認得她的臉 ${med(roamAlive.map(faces))} 人／需 4`)
 console.log(`       逐人：${perNpc(roamAlive)}`)
+
+// ── 久不見的關係衰減：有沒有真的在跑 ──
+//
+// ★ 這一段是報告而不是閘，但它非有不可：這個機制在 design/01_architecture.md §8
+//   躺了整個專案都【沒有實作】，而沒有人發現，因為看不見的東西不會變紅。
+//   （驗收它的時候我自己也先量錯過一次：數 ledger.kind === '關係'，
+//   而 kind 只有 'action' | 'body'，於是量到「0 局發生」而差點去改一個正常的機制。）
+{
+  const pool = [...roamAlive, ...alive]
+  const withFade = pool.filter((s) => s.ledger.some((e) => e.action === '關係'))
+  const lines = pool.reduce((a, s) => a + s.ledger.filter((e) => e.action === '關係').length, 0)
+  console.log(`
+── 久不見的關係會退（寬限 ${FADE_GRACE_DAYS} 日，每日 −${FADE_PER_DAY}，只退信任與情感）──`)
+  console.log(`   ${pool.length} 局中有 ${withFade.length} 局（${(withFade.length / pool.length * 100).toFixed(0)}%）`
+    + `至少被冷落過一個人，合計 ${lines} 次（一局 ${(lines / pool.length).toFixed(1)}）`)
+}
 
 // ── 逐份工作：有沒有人做得到 ──
 const takes = jobTakeRate([alive, roamAlive, explore.filter((s) => !s.dead), roam.filter((s) => s.dead)])

@@ -513,6 +513,45 @@ selfTest({
   },
 })
 
+// ══════════════ ⑭ 關係衰減 ══════════════
+selfTest({
+  gate: '⑭', name: '★★ 讓 acquaintance 也跟著退（等於偷偷改掉「平凡」的結局門檻）',
+  script: 'unit-test.ts', files: ['src/engine/reduce.ts'],
+  mutate: ({ readText, writeText }) => {
+    const t = readText('src/engine/reduce.ts')
+    const from = 'npcs[f.id] = { ...cur, trust: cur.trust - f.trust, affection: cur.affection - f.affection }'
+    if (!t.includes(from)) throw new Error('注入錨點失效：衰減的寫回點找不到')
+    writeText('src/engine/reduce.ts', t.replace(from,
+      'npcs[f.id] = { ...cur, acquaintance: Math.max(0, cur.acquaintance - f.trust),'
+      + ' trust: cur.trust - f.trust, affection: cur.affection - f.affection }'))
+  },
+})
+selfTest({
+  gate: '⑭', name: '★ 拿掉退不成負數的夾制',
+  script: 'unit-test.ts', files: ['src/engine/mind.ts'],
+  mutate: ({ readText, writeText }) => {
+    const t = readText('src/engine/mind.ts')
+    const from = '    const trust = Math.min(FADE_PER_DAY, n.trust)'
+    if (!t.includes(from)) throw new Error('注入錨點失效：trust 的夾制找不到')
+    writeText('src/engine/mind.ts', t.replace(from, '    const trust = FADE_PER_DAY'))
+  },
+})
+selfTest({
+  gate: '⑭', name: '★★ 見了面也不停（單向崩壞 —— 禁忌 8）',
+  script: 'unit-test.ts', files: ['src/engine/reduce.ts'],
+  mutate: ({ readText, writeText }) => {
+    const t = readText('src/engine/reduce.ts')
+    // 說話那一支不再把 lastSeenDay 推回今天 —— 於是衰減永遠停不下來
+    const idx = t.indexOf("      const lines = npc.talkLines")
+    if (idx < 0) throw new Error('注入錨點失效：talk 分支找不到')
+    const head = t.slice(0, idx)
+    const cut = head.lastIndexOf('            lastSeenDay: s.clock.day,')
+    if (cut < 0) throw new Error('注入錨點失效：talk 的 lastSeenDay 找不到')
+    writeText('src/engine/reduce.ts',
+      t.slice(0, cut) + '            lastSeenDay: cur.lastSeenDay,' + t.slice(cut + '            lastSeenDay: s.clock.day,'.length))
+  },
+})
+
 // ══════════════ 內容漂移（build-data --check 是獨立的一道閘）══════════════
 {
   const backup = fs.readFileSync(P('data/events.json'))

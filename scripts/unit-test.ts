@@ -25,7 +25,9 @@ import { buildIndex, type Content, type GameState, type Index } from '../src/eng
 import { LAST_DAY, NEED_KEYS } from '../src/engine/clock.ts'
 import { DEPRIVATION_STAGES, quoteSuppuration, needsHazard } from '../src/engine/body.ts'
 import { staminaFor } from '../src/engine/map.ts'
-import { CLEAN, HOT_MEAL_WARMTH, SHELTER, fatigueMul } from '../src/engine/mind.ts'
+import {
+  CLEAN, FADE_GRACE_DAYS, FADE_PER_DAY, HOT_MEAL_WARMTH, SHELTER, fadeRelations, fatigueMul,
+} from '../src/engine/mind.ts'
 import {
   attemptKey, attemptsLeft, canTalk, initialState, quoteHireChance, quoteMinutes, reduce,
   workBlock, type Action,
@@ -837,6 +839,123 @@ function testWorkBlockAgreement() {
         + `另以資料獨立驗證 ${jobs.length} 份工的時段與 requires 守衛都還在`)
 }
 testWorkBlockAgreement()
+
+/**
+ * ⑭ ★★ 久不見的關係衰減：只退現在式、退得完、而且退得回來。
+ *
+ * design/01_architecture.md §8 從第一天就寫著「lastSeenDay —— 久不見會衰減」，
+ * 而那件事【從來沒有實作過】：那個欄位被寫入三處，唯一讀取端是孤立感。
+ * 這一項是它上線之後的驗收，守三條它不可以違反的界線：
+ *
+ *   (a) acquaintance 一點都不能動 —— 三軸的定義寫在 types.ts／cond.ts 裡，
+ *       acquaintance 是「他認得你的臉」。認得一張臉不會在一個月內失效。
+ *       （而「平凡」整條結局都掛在 acquaintance 上，動它等於偷偷改結局門檻。）
+ *   (b) 退得完但不會變成負的，也不會退過寬限期之前的量。
+ *   (c) ★ 退得回來 —— 06_lifelong.md 禁忌 8【禁止單向崩壞】。
+ *       見一次面就把 lastSeenDay 推回今天，衰減必須立刻停止。
+ *
+ * ★ 這一項是被一次【我自己的量測錯誤】逼出來的：第一次驗收時我數
+ *   `ledger.kind === '關係'`，而 kind 只有 'action' | 'body'，「關係」是
+ *   放在 action 欄位。於是我量到「150 局裡 0 局發生衰減」，差一點就把
+ *   一個正常運作的機制當成沒接上而去改它。純函式的直接斷言不會有這種事。
+ */
+function testRelationFade() {
+  const problems: string[] = []
+  const mk = (lastSeenDay: number | null, trust = 40, affection = 20, acq = 55) => ({
+    clock: { day: 20, minute: 0 },
+    npcs: { x: { acquaintance: acq, trust, affection, lastSeenDay, knownFacts: [] } },
+  } as unknown as GameState)
+
+  // (a) 寬限期之內一律不動
+  for (let away = 0; away <= FADE_GRACE_DAYS; away++) {
+    if (fadeRelations(mk(20 - away)).length > 0) {
+      problems.push(`才 ${away} 天沒見就開始退（寬限期是 ${FADE_GRACE_DAYS} 天）`)
+    }
+  }
+  // 寬限期一過就要開始退，而且第一天要標 startedFading（ledger 只報這一次）
+  const first = fadeRelations(mk(20 - (FADE_GRACE_DAYS + 1)))
+  if (first.length !== 1 || !first[0]!.startedFading) {
+    problems.push(`第 ${FADE_GRACE_DAYS + 1} 天沒見時應該開始退並標記 startedFading`)
+  }
+  if (fadeRelations(mk(20 - (FADE_GRACE_DAYS + 2)))[0]?.startedFading) {
+    problems.push('startedFading 應該只在寬限期剛過的那一天為真（否則 ledger 每天洗版）')
+  }
+
+  // (b) 一天最多退 FADE_PER_DAY，且退不成負的
+  const big = fadeRelations(mk(1, 100, 100))[0]!
+  if (big.trust > FADE_PER_DAY || big.affection > FADE_PER_DAY) {
+    problems.push(`一天退超過 ${FADE_PER_DAY}（trust ${big.trust}／affection ${big.affection}）`)
+  }
+  const empty = fadeRelations(mk(1, 0, 0))
+  if (empty.length > 0) problems.push('已經是 0 還在退 —— 會退成負數')
+  const tiny = fadeRelations(mk(1, 0.3, 0))[0]!
+  if (tiny.trust > 0.3) problems.push('退的量超過剩下的量 —— 會退成負數')
+
+  // (a) acquaintance 絕對不動：跑一整局，比對「只靠說話與事件」推得動的軸
+  {
+    let s = initialState('fade-inv', 'bh:alley', [], IDX)
+    s = {
+      ...s, clock: { day: 1, minute: 8 * 60 },
+      npcs: { 'npc-alley-neighbour': {
+        acquaintance: 62, trust: 55, affection: 30, lastSeenDay: 1, knownFacts: [],
+      } },
+    } as GameState
+    /**
+     * 什麼都不做，只讓時間走 20 天。
+     * ★ 每小時把需求撐回去 —— 這一項測的是【關係】不是存活。
+     *   第一版沒撐，她在第 3–4 日就渴死，`!s.dead` 提前跳出，
+     *   於是測試回報「衰減根本沒接上」而其實是它自己沒走到那一天。
+     */
+    for (let i = 0; i < 20 * 24 && !s.dead; i++) {
+      s = { ...s, needs: { ...s.needs, satiety: 90, hydration: 90, stamina: 90, warmth: 90 },
+        deprivation: { thirstMinutes: 0, starveMinutes: 0, coldMinutes: 0 } } as GameState
+      s = reduce(s, { t: 'wait', minutes: 60 }, IDX).s
+    }
+    const st = s.npcs['npc-alley-neighbour']
+    if (st && Math.abs(st.acquaintance - 62) > 0.001) {
+      problems.push(`放著不管 20 天之後 acquaintance 從 62 變成 ${st.acquaintance.toFixed(1)}`
+        + ' —— 那是「他認得你的臉」，不該退，而且「平凡」整條結局都掛在它上面')
+    }
+    if (st && st.trust >= 55) {
+      problems.push(`放著不管 20 天，trust 卻沒有退（${st.trust.toFixed(1)}）—— 衰減根本沒接上`)
+    }
+    if (st && (st.trust < 0 || st.affection < 0)) {
+      problems.push(`退成負數：trust ${st.trust}／affection ${st.affection}`)
+    }
+  }
+
+  // (c) 退得回來：見一次面就停（禁忌 8 禁止單向崩壞）
+  {
+    let s = initialState('fade-back', 'bh:alley', [], IDX)
+    s = {
+      ...s, clock: { day: 12, minute: 9 * 60 },
+      npcs: { 'npc-alley-neighbour': {
+        acquaintance: 40, trust: 30, affection: 10, lastSeenDay: 1, knownFacts: [],
+      } },
+    } as GameState
+    const before = s.npcs['npc-alley-neighbour']!.trust
+    s = reduce(s, { t: 'talk', npc: 'npc-alley-neighbour' }, IDX).s
+    const afterTalk = s.npcs['npc-alley-neighbour']!.trust
+    if (afterTalk <= before) problems.push('見了面信任卻沒有回升 —— 衰減不可逆的話就是單向崩壞')
+    // 見面之後接著過三天（仍在寬限內），不該再退
+    const t0 = s.npcs['npc-alley-neighbour']!.trust
+    for (let i = 0; i < 3 * 24 && !s.dead; i++) {
+      s = { ...s, needs: { ...s.needs, satiety: 90, hydration: 90, stamina: 90, warmth: 90 },
+        deprivation: { thirstMinutes: 0, starveMinutes: 0, coldMinutes: 0 } } as GameState
+      s = reduce(s, { t: 'wait', minutes: 60 }, IDX).s
+    }
+    if (s.npcs['npc-alley-neighbour']!.trust < t0 - 0.001) {
+      problems.push('見過面之後的寬限期內仍然在退 —— lastSeenDay 沒有被推回今天')
+    }
+  }
+
+  T(14, '★★ 久不見的關係衰減：只退現在式、退不成負數、而且見一面就停',
+    problems.length === 0,
+    problems.length ? problems.join('；')
+      : `寬限 ${FADE_GRACE_DAYS} 日、每日 −${FADE_PER_DAY}；`
+        + 'acquaintance 放著 20 天分毫未動，trust／affection 退得完退不成負數，見一次面即止')
+}
+testRelationFade()
 
 // ── 輸出 ──
 console.log('=== 無籍者 · 單元／性質測試 ===\n')

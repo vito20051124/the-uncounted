@@ -170,6 +170,58 @@ function gain(cur: number, base: number): number {
  * @param ateHotToday 當日是否吃過熱食
  * @param cleanedToday 當日洗淨的等級加總（0 = 沒洗）
  */
+/**
+ * ★★★ 久不見，關係會退 —— 但只退【現在式】的那兩軸。
+ *
+ * design/01_architecture.md §8 從第一天就寫著：
+ *   「lastSeenDay —— 久不見會衰減 → 讓第 3 層成為【穩定狀態】」
+ * 而這件事【從來沒有實作過】。lastSeenDay 被寫入三處，唯一的讀取端是
+ * 上面那條孤立感。於是關係是一個只進不退的棘輪——這與本專案已經
+ * 修掉的「清潔是單向槽」是同一個形狀。
+ *
+ * ═══ 為什麼只退 trust 與 affection，不退 acquaintance ═══
+ *
+ * 不是為了讓數字好看，是這三軸【自己的定義】就這樣寫著：
+ * types.ts 與 cond.ts 的註解把 acquaintance 定為「他認得你的臉」，
+ * 把 affection 定為「安家線的伴侶；平凡線的鄰人」。
+ *
+ *   認得一張臉不會在一個月內失效。信任與親近才是關係的現在式。
+ *
+ * 而且三軸一起退會製造一個【每三天巡一次所有人】的差事，
+ * 那正是 00_pillars.md 反 DoL 條款一禁止的「無代價的重複點擊」。
+ * 只退現在式，玩家要維持的就只有那一兩個對他的結局真正重要的人——
+ * 而「安家」要的正是某一個人的 trust >= 50，於是那條線變成
+ * 「你得一直出現」，這本來就是它該問的事。
+ *
+ * ═══ 速率的錨 ═══
+ *
+ * 寬限 4 日：孤立感用的是 3 日（上面那條），關係比孤立更慢一階。
+ * 每日 −0.8：一次閒聊在 trust 50 時加 1.5（talkGain(50, 3)），
+ * 所以【兩天不見約等於退掉一次拜訪】，而寬限期讓正常生活不會被罰。
+ * 走到 trust 50 之後放著八天不管會掉到 46.8 —— 剛好過不了安家的門檻。
+ */
+export const FADE_GRACE_DAYS = 4
+export const FADE_PER_DAY = 0.8
+
+export type Fade = { id: string; trust: number; affection: number; startedFading: boolean }
+
+/** 純函式：回傳今天該對誰扣多少。呼叫端負責寫回 state 與 ledger。 */
+export function fadeRelations(s: GameState): Fade[] {
+  const out: Fade[] = []
+  for (const [id, n] of Object.entries(s.npcs)) {
+    if (n.lastSeenDay === null) continue
+    const away = s.clock.day - n.lastSeenDay
+    if (away <= FADE_GRACE_DAYS) continue
+    const trust = Math.min(FADE_PER_DAY, n.trust)
+    const affection = Math.min(FADE_PER_DAY, n.affection)
+    if (trust <= 0 && affection <= 0) continue
+    // ★ 只在【寬限期剛過的那一天】報一次，之後靜靜地退。
+    //   每天報一次會在死亡回溯的決策鏈上洗掉真正重要的那幾行。
+    out.push({ id, trust, affection, startedFading: away === FADE_GRACE_DAYS + 1 })
+  }
+  return out
+}
+
 export function settleDay(
   s: GameState,
   opts: { workedToday: boolean; talkedToday: boolean; ateHotToday: boolean; cleanedBonus: number }

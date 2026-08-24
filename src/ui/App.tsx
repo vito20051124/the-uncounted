@@ -16,7 +16,7 @@ import {
   DEPRIVATION_STAGES, explainSuppuration, isIncapacitated, needsHazard, needsTreatment,
   quoteSuppuration, P_WORSEN, P_WORSEN_TREATED, P_DEATH_SEVERE, P_DEATH_SEVERE_TREATED,
 } from '../engine/body.ts'
-import { CLEAN, UNWIND_GAIN, bandOf, canUnwind, cleanBlocked, fatigueMul, type CleanKind } from '../engine/mind.ts'
+import { CLEAN, FADE_GRACE_DAYS, UNWIND_GAIN, bandOf, canUnwind, cleanBlocked, fatigueMul, type CleanKind } from '../engine/mind.ts'
 import {
   attemptKey, attemptsLeft, canTalk, ctxOf, initialState, quoteHireChance, quoteMinutes,
   reduce, workBlock, workBlockText, type Action,
@@ -593,6 +593,17 @@ export function App() {
                           <span class="choice-meta">
                             {quoteMinutes(s, 30)} 分
                             {st ? `熟識 ${Math.round(st.acquaintance)}　信任 ${Math.round(st.trust)}` : '還沒說過話'}
+                            {/* ★ 久不見會退信任與情感（mind.ts fadeRelations）。
+                                看不見的衰減比沒有衰減更糟——所以在寬限期還沒過的時候
+                                就把「幾天沒見」印出來，玩家才有機會在被扣之前決定要不要走一趟。 */}
+                            {st?.lastSeenDay !== null && st !== undefined
+                              && s.clock.day - st.lastSeenDay! >= FADE_GRACE_DAYS
+                              && (
+                                <span class={s.clock.day - st.lastSeenDay! > FADE_GRACE_DAYS ? 'no' : ''}>
+                                  {`　${s.clock.day - st.lastSeenDay!} 天沒見`}
+                                  {s.clock.day - st.lastSeenDay! > FADE_GRACE_DAYS && '（信任正在退）'}
+                                </span>
+                              )}
                             {!ok && <span class="no">　—— 今天已經聊過了</span>}
                           </span>
                         </button>

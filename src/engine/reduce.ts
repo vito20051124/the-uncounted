@@ -9,7 +9,7 @@
 
 import { advanceTime, tideAt, tideTurnedDuring, NEED_KEYS } from './clock.ts'
 import {
-  CLEAN, canUnwind, cleanBlocked, fatigueMul, settleDay,
+  CLEAN, canUnwind, cleanBlocked, fadeRelations, fatigueMul, settleDay,
   HOT_MEAL_WARMTH, SHELTER, UNWIND_GAIN, UNWIND_MINUTES, UNWIND_STAMINA, type CleanKind,
 } from './mind.ts'
 import { evaluate, type Ctx } from './cond.ts'
@@ -320,6 +320,32 @@ function settleMind(s: GameState, idx: Index): GameState {
   for (const row of res.rows) {
     const label = rowText[row.key] ?? row.key
     out = { ...out, ledger: ledger(out, out, '心理', `${label}｜理智 ${row.delta > 0 ? '+' : ''}${row.delta}`, row.exits, 'body') }
+  }
+
+  /**
+   * ★ 久不見，關係的【現在式】會退（見 mind.ts fadeRelations 的完整理由）。
+   *   認得一張臉不會失效，所以 acquaintance 不動；退的是 trust 與 affection。
+   *
+   *   ledger 只在寬限期剛過的那一天寫一行——玩家需要知道的是
+   *   「這件事開始了」，而不是往後每天都被提醒一次。
+   */
+  const fades = fadeRelations(out)
+  if (fades.length > 0) {
+    const npcs = { ...out.npcs }
+    for (const f of fades) {
+      const cur = npcs[f.id]!
+      npcs[f.id] = { ...cur, trust: cur.trust - f.trust, affection: cur.affection - f.affection }
+    }
+    out = { ...out, npcs }
+    for (const f of fades) {
+      if (!f.startedFading) continue
+      const name = idx.npc.get(f.id as never)?.name ?? f.id
+      out = {
+        ...out,
+        ledger: ledger(out, out, '關係', `${name}有陣子沒見到你了`,
+          [`去${idx.npc.get(f.id as never)?.at === out.at ? '找他說一句話' : '他那裡走一趟'}（30 分鐘，不用錢）`], 'body'),
+      }
+    }
   }
   return out
 }
